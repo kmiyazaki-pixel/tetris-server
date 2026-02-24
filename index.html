@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Tetris Attack Online</title>
+    <title>Tetris Realtime Battle</title>
     <style>
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
-        #status { background: #4caf50; padding: 8px; font-weight: bold; font-size: 14px; transition: 0.3s; }
+        #status { background: #4caf50; padding: 8px; font-weight: bold; font-size: 14px; height: 20px; }
         .attack-warning { background: #f44336 !important; animation: blink 0.5s infinite; }
         @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
         .game-area { display: flex; justify-content: center; gap: 10px; margin-top: 15px; }
@@ -19,7 +19,7 @@
     </style>
 </head>
 <body>
-    <div id="status">接続待機中...</div>
+    <div id="status">サーバー接続中...</div>
     <div class="game-area">
         <div><div>YOU</div><canvas id="localCanvas"></canvas></div>
         <div><div>RIVAL</div><canvas id="remoteCanvas"></canvas></div>
@@ -28,7 +28,7 @@
         <button onclick="handleInput('left')">←</button>
         <button class="rotate" onclick="handleInput('rotate')">回転</button>
         <button onclick="handleInput('right')">→</button>
-        <button class="drop" onclick="handleInput('drop')">即時落下</button>
+        <button class="drop" onclick="handleInput('drop')">即落下</button>
     </div>
 
     <script>
@@ -60,60 +60,34 @@
                 if (data.type === 'start') {
                     isStarted = true; myId = data.userId;
                     document.getElementById('status').innerText = "対戦中！";
-                    if(!piece) { piece = createPiece(); gameLoop(); }
+                    if(!piece) { piece = createPiece(); requestAnimationFrame(gameLoop); }
                 }
                 if (data.type === 'gameData' && data.sender !== myId) {
-                    remoteBoard = data.board; remotePiece = data.piece;
+                    remoteBoard = data.board; 
+                    remotePiece = data.piece;
                 }
                 if (data.type === 'attack') {
                     pendingAttack += data.lines;
                     const s = document.getElementById('status');
-                    s.innerText = "⚠️ 攻撃が来ます: " + pendingAttack + "行";
+                    s.innerText = "⚠️ 攻撃警告: " + pendingAttack + "行";
                     s.classList.add('attack-warning');
                 }
             };
         }
 
-        function sendAttack(lines) {
-            console.log("攻撃送信:", lines);
-            socket.send(JSON.stringify({ type: 'attack', roomId, lines }));
-        }
-
-        function applyAttack() {
-            if (pendingAttack <= 0) return;
-            for (let i = 0; i < pendingAttack; i++) {
-                board.shift();
-                let row = Array(COLS).fill(8);
-                row[Math.floor(Math.random() * COLS)] = 0; 
-                board.push(row);
+        // ★最強の同期送信：状態が変わるたびに必ず呼ぶ
+        function sync() {
+            if (socket && socket.readyState === WebSocket.OPEN && isStarted) {
+                socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece }));
             }
-            pendingAttack = 0;
-            const s = document.getElementById('status');
-            s.innerText = "対戦中！";
-            s.classList.remove('attack-warning');
         }
 
-        function p_clear() {
-            let cleared = 0;
-            for (let y = ROWS - 1; y >= 0; y--) {
-                if (board[y].every(cell => cell !== 0)) {
-                    board.splice(y, 1);
-                    board.unshift(Array(COLS).fill(0));
-                    cleared++; y++;
-                }
-            }
-            // 攻撃ルール：1列消し=0, 2列=1, 3列=2, 4列=4
-            if (cleared === 2) sendAttack(1);
-            else if (cleared === 3) sendAttack(2);
-            else if (cleared === 4) sendAttack(4);
-        }
-
-        // --- 以下共通ロジック ---
         function createPiece() {
             const SHAPES = [null, [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]]];
             const id = Math.floor(Math.random() * 7) + 1;
             return { id, matrix: SHAPES[id], x: 3, y: 0 };
         }
+
         function collide(b, p) {
             for (let y = 0; y < p.matrix.length; y++) {
                 for (let x = 0; x < p.matrix[y].length; x++) {
@@ -122,40 +96,83 @@
             }
             return false;
         }
-        function rotate(matrix) { return matrix[0].map((_, i) => matrix.map(row => row[i]).reverse()); }
+
         function handleInput(type) {
             if (!isStarted || !piece) return;
             if (type === 'left') { piece.x--; if(collide(board, piece)) piece.x++; }
             if (type === 'right') { piece.x++; if(collide(board, piece)) piece.x--; }
-            if (type === 'rotate') { const pre = piece.matrix; piece.matrix = rotate(piece.matrix); if(collide(board, piece)) piece.matrix = pre; }
+            if (type === 'rotate') { 
+                const pre = piece.matrix; piece.matrix = rotate(piece.matrix); 
+                if(collide(board, piece)) piece.matrix = pre; 
+            }
             if (type === 'drop') { while(!collide(board, piece)) { piece.y++; } piece.y--; drop(); }
-            draw(); socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece }));
+            sync(); // 操作した瞬間に同期
         }
+
+        function rotate(matrix) { return matrix[0].map((_, i) => matrix.map(row => row[i]).reverse()); }
+
         function drop() {
             if (!isStarted || !piece) return;
             piece.y++;
             if (collide(board, piece)) {
                 piece.y--;
                 piece.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v) board[y+piece.y][x+piece.x] = piece.id; }); });
-                p_clear();
-                applyAttack(); 
+                
+                // ライン消去 & 攻撃送信
+                let cleared = 0;
+                for (let y = ROWS - 1; y >= 0; y--) {
+                    if (board[y].every(cell => cell !== 0)) {
+                        board.splice(y, 1); board.unshift(Array(COLS).fill(0));
+                        cleared++; y++;
+                    }
+                }
+                if (cleared >= 2) {
+                    socket.send(JSON.stringify({ type: 'attack', roomId, lines: cleared === 4 ? 4 : cleared - 1 }));
+                }
+
+                // 溜まった攻撃を受ける
+                if (pendingAttack > 0) {
+                    for (let i = 0; i < pendingAttack; i++) {
+                        board.shift();
+                        let row = Array(COLS).fill(8); row[Math.floor(Math.random() * COLS)] = 0;
+                        board.push(row);
+                    }
+                    pendingAttack = 0;
+                    document.getElementById('status').innerText = "対戦中！";
+                    document.getElementById('status').classList.remove('attack-warning');
+                }
+
                 piece = createPiece();
-                if (collide(board, piece)) { isStarted = false; alert("GAME OVER"); board = Array.from({length: ROWS}, () => Array(COLS).fill(0)); }
+                if (collide(board, piece)) { 
+                    isStarted = false; alert("GAME OVER"); 
+                    board = Array.from({length: ROWS}, () => Array(COLS).fill(0)); 
+                }
             }
-            socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece }));
+            sync(); // 自然落下した瞬間に同期
         }
+
         function drawBoard(ctx, b, p) {
             ctx.fillStyle = '#000'; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
             b.forEach((row, y) => { row.forEach((v, x) => { if(v) { ctx.fillStyle = COLORS[v]; ctx.fillRect(x*BLOCK_SIZE, y*BLOCK_SIZE, BLOCK_SIZE-1, BLOCK_SIZE-1); } }); });
             if(p) { ctx.fillStyle = COLORS[p.id]; p.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect((p.x+x)*BLOCK_SIZE, (p.y+y)*BLOCK_SIZE, BLOCK_SIZE-1, BLOCK_SIZE-1); }); }); }
         }
-        function draw() { drawBoard(localCtx, board, piece); drawBoard(remoteCtx, remoteBoard, remotePiece); }
-        let lastTime = 0, dropCounter = 0;
+
+        let lastTime = 0, dropCounter = 0, syncCounter = 0;
         function gameLoop(time = 0) {
             if (!isStarted) return;
-            const dt = time - lastTime; lastTime = time; dropCounter += dt;
+            const dt = time - lastTime; lastTime = time;
+            dropCounter += dt;
+            syncCounter += dt;
+
+            // 1秒ごとに落下
             if (dropCounter > 1000) { drop(); dropCounter = 0; }
-            draw(); requestAnimationFrame(gameLoop);
+            
+            // ★超重要：操作していなくても0.1秒ごとに強制同期して「ヌルヌル」動かす
+            if (syncCounter > 100) { sync(); syncCounter = 0; }
+
+            drawBoard(localCtx, board, piece);
+            drawBoard(remoteCtx, remoteBoard, remotePiece);
+            requestAnimationFrame(gameLoop);
         }
         connect();
     </script>
