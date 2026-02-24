@@ -1,13 +1,9 @@
 {
-  "name": "tetris-server",
-  "version": "1.0.0",
-  "description": "Tetris Multiplayer Server",
-  "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "build": "npm install"
+    "start": "node server.js"
   },
   "dependencies": {
     "ws": "^8.13.0"
   }
 }
+
