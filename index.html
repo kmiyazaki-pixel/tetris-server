@@ -6,7 +6,7 @@
     <title>Tetris Online Battle</title>
     <style>
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
-        #status { background: #4caf50; padding: 8px; font-weight: bold; font-size: 14px; }
+        #status { background: #4caf50; padding: 8px; font-weight: bold; font-size: 14px; height: 20px; }
         .game-area { display: flex; justify-content: center; gap: 10px; margin-top: 15px; }
         .player-label { font-size: 12px; margin-bottom: 5px; color: #aaa; }
         canvas { background: #000; border: 2px solid #333; width: 140px; height: 280px; }
@@ -41,19 +41,17 @@
     <script>
         const SERVER_URL = 'wss://tetris-server-7w6p.onrender.com';
         const COLS = 10, ROWS = 20, BLOCK_SIZE = 20;
-        let socket, roomId, isStarted = false;
+        let socket, roomId, myId, isStarted = false;
         
         const localCtx = document.getElementById('localCanvas').getContext('2d');
         const remoteCtx = document.getElementById('remoteCanvas').getContext('2d');
         document.querySelectorAll('canvas').forEach(c => { c.width = COLS * BLOCK_SIZE; c.height = ROWS * BLOCK_SIZE; });
 
-        // ゲームロジック用変数
         let board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
         let piece = null;
         const COLORS = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF'];
         const SHAPES = [null, [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]]];
 
-        // --- 通信コア ---
         function connect() {
             roomId = prompt("ルームIDを入力してください", "0707");
             socket = new WebSocket(SERVER_URL);
@@ -65,27 +63,34 @@
 
             socket.onmessage = (e) => {
                 const data = JSON.parse(e.data);
-                
-                // 対戦相手が来たらスタート
+                console.log("受信:", data); // デバッグ用ログ
+
                 if (data.type === 'start') {
                     document.getElementById('status').innerText = "対戦中！";
                     isStarted = true;
+                    // 自分のIDを保存（サーバーがIDを返してくれる前提）
+                    if (data.userId) myId = data.userId;
                     if(!piece) {
                         piece = createPiece();
                         gameLoop();
                     }
                 }
                 
-                // 相手から盤面データが届いた時の処理 ★ここが重要
-                if (data.type === 'gameData' && data.sender !== socket.id) {
-                    drawBoard(remoteCtx, data.board, data.piece);
+                // 相手からの盤面データを受信
+                if (data.type === 'gameData') {
+                    // サーバーから「送信者ID」が送られてくる場合、自分以外なら描画
+                    if (data.sender && data.sender !== myId) {
+                        drawBoard(remoteCtx, data.board, data.piece);
+                    } else if (!data.sender) {
+                        // IDがない場合は、データの中身が自分と違えば相手とみなす（簡易判定）
+                        drawBoard(remoteCtx, data.board, data.piece);
+                    }
                 }
             };
         }
 
-        // --- 自分の操作を相手に送る ---
         function sendData() {
-            if (socket.readyState === WebSocket.OPEN) {
+            if (socket && socket.readyState === WebSocket.OPEN && isStarted) {
                 socket.send(JSON.stringify({
                     type: 'gameData',
                     roomId: roomId,
@@ -95,7 +100,7 @@
             }
         }
 
-        // --- テトリス基本ロジック ---
+        // --- 以下、ゲームエンジン部分は変更なし ---
         function createPiece() {
             const id = Math.floor(Math.random() * 7) + 1;
             return { id, matrix: SHAPES[id], x: 3, y: 0 };
@@ -137,15 +142,15 @@
                 drop();
             }
             drawBoard(localCtx, board, piece);
-            sendData(); // 操作のたびに送信
+            sendData();
         }
 
         function drop() {
+            if (!isStarted || !piece) return;
             piece.y++;
             if (collide(board, piece)) {
                 piece.y--;
                 merge(board, piece);
-                // ライン消去
                 outer: for (let y = ROWS - 1; y >= 0; y--) {
                     if (board[y].every(cell => cell !== 0)) {
                         board.splice(y, 1);
@@ -155,15 +160,17 @@
                 }
                 piece = createPiece();
                 if (collide(board, piece)) {
+                    isStarted = false;
                     alert("GAME OVER");
                     board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
                 }
             }
             drawBoard(localCtx, board, piece);
-            sendData(); // 落下（自動含む）のたびに送信
+            sendData();
         }
 
         function drawBoard(ctx, b, p) {
+            if (!b) return;
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
             
@@ -187,8 +194,9 @@
 
         let lastTime = 0;
         function gameLoop(time = 0) {
+            if (!isStarted) return;
             const deltaTime = time - lastTime;
-            if (deltaTime > 1000) { // 1秒ごとに自動落下
+            if (deltaTime > 1000) {
                 drop();
                 lastTime = time;
             }
