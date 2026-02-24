@@ -1,10 +1,11 @@
 {
-  "name": "tetris-relay-server",
+  "name": "tetris-server",
   "version": "1.0.0",
-  "description": "Global Tetris Relay",
-  "main": "server.js",
+  "description": "Tetris Multiplayer Server",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node src/server.js",
+    "build": "npm install"
   },
   "dependencies": {
     "ws": "^8.13.0"
