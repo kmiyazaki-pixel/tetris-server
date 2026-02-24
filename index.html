@@ -5,20 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Tetris Online Battle</title>
     <style>
-        body { background: #20232a; color: white; text-align: center; font-family: 'Arial', sans-serif; margin: 0; overflow: hidden; }
-        #status { background: #61dafb; color: #282c34; padding: 5px; font-weight: bold; font-size: 14px; }
-        .game-area { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
-        .player-label { font-size: 12px; margin-bottom: 5px; color: #abb2bf; }
-        canvas { background: #000; border: 2px solid #444; width: 140px; height: 280px; }
-        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 90%; max-width: 320px; margin: 15px auto; }
-        button { background: #3e4451; color: white; border: none; padding: 18px; font-size: 20px; border-radius: 12px; touch-action: manipulation; box-shadow: 0 4px #21252b; }
-        button:active { box-shadow: 0 0 #21252b; transform: translateY(4px); }
-        .rotate { background: #61dafb; color: #282c34; }
-        .drop { grid-column: span 3; background: #e06c75; margin-top: 5px; }
+        body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
+        #status { background: #4caf50; padding: 8px; font-weight: bold; font-size: 14px; }
+        .game-area { display: flex; justify-content: center; gap: 10px; margin-top: 15px; }
+        .player-label { font-size: 12px; margin-bottom: 5px; color: #aaa; }
+        canvas { background: #000; border: 2px solid #333; width: 140px; height: 280px; }
+        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 90%; max-width: 320px; margin: 20px auto; }
+        button { background: #333; color: white; border: none; padding: 20px; font-size: 20px; border-radius: 12px; touch-action: manipulation; border-bottom: 4px solid #111; }
+        button:active { border-bottom: 0; transform: translateY(4px); }
+        .rotate { background: #2196f3; }
+        .drop { grid-column: span 3; background: #f44336; }
     </style>
 </head>
 <body>
-    <div id="status">サーバー接続中...</div>
+    <div id="status">接続を待機中...</div>
     
     <div class="game-area">
         <div>
@@ -35,7 +35,7 @@
         <button onclick="handleInput('left')">←</button>
         <button class="rotate" onclick="handleInput('rotate')">回転</button>
         <button onclick="handleInput('right')">→</button>
-        <button class="drop" onclick="handleInput('drop')">落とす (Hard Drop)</button>
+        <button class="drop" onclick="handleInput('drop')">即時落下</button>
     </div>
 
     <script>
@@ -47,21 +47,55 @@
         const remoteCtx = document.getElementById('remoteCanvas').getContext('2d');
         document.querySelectorAll('canvas').forEach(c => { c.width = COLS * BLOCK_SIZE; c.height = ROWS * BLOCK_SIZE; });
 
-        // --- テトリスロジック ---
+        // ゲームロジック用変数
         let board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
         let piece = null;
+        const COLORS = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF'];
+        const SHAPES = [null, [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]]];
 
-        const SHAPES = [
-            null,
-            [[1,1,1,1]], // I
-            [[1,1],[1,1]], // O
-            [[0,1,0],[1,1,1]], // T
-            [[1,1,0],[0,1,1]], // S
-            [[0,1,1],[1,1,0]], // Z
-            [[1,0,0],[1,1,1]], // L
-            [[0,0,1],[1,1,1]]  // J
-        ];
+        // --- 通信コア ---
+        function connect() {
+            roomId = prompt("ルームIDを入力してください", "0707");
+            socket = new WebSocket(SERVER_URL);
+            
+            socket.onopen = () => {
+                document.getElementById('status').innerText = "相手を待っています...";
+                socket.send(JSON.stringify({ type: 'join', roomId: roomId }));
+            };
 
+            socket.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                
+                // 対戦相手が来たらスタート
+                if (data.type === 'start') {
+                    document.getElementById('status').innerText = "対戦中！";
+                    isStarted = true;
+                    if(!piece) {
+                        piece = createPiece();
+                        gameLoop();
+                    }
+                }
+                
+                // 相手から盤面データが届いた時の処理 ★ここが重要
+                if (data.type === 'gameData' && data.sender !== socket.id) {
+                    drawBoard(remoteCtx, data.board, data.piece);
+                }
+            };
+        }
+
+        // --- 自分の操作を相手に送る ---
+        function sendData() {
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'gameData',
+                    roomId: roomId,
+                    board: board,
+                    piece: piece
+                }));
+            }
+        }
+
+        // --- テトリス基本ロジック ---
         function createPiece() {
             const id = Math.floor(Math.random() * 7) + 1;
             return { id, matrix: SHAPES[id], x: 3, y: 0 };
@@ -88,39 +122,6 @@
             return matrix[0].map((_, i) => matrix.map(row => row[i]).reverse());
         }
 
-        function clearLines() {
-            for (let y = ROWS - 1; y >= 0; y--) {
-                if (board[y].every(cell => cell !== 0)) {
-                    board.splice(y, 1);
-                    board.unshift(Array(COLS).fill(0));
-                    y++;
-                }
-            }
-        }
-
-        // --- 通信・ゲームループ ---
-        function connect() {
-            roomId = prompt("ルームIDを入力してください", "0707");
-            socket = new WebSocket(SERVER_URL);
-            
-            socket.onopen = () => {
-                document.getElementById('status').innerText = "相手を待っています...";
-                socket.send(JSON.stringify({ type: 'join', roomId: roomId }));
-            };
-
-            socket.onmessage = (e) => {
-                const data = JSON.parse(e.data);
-                if (data.type === 'start') {
-                    isStarted = true;
-                    piece = createPiece();
-                    gameLoop();
-                }
-                if (data.type === 'gameData' && data.sender !== socket.id) {
-                    drawBoard(remoteCtx, data.board, data.piece);
-                }
-            };
-        }
-
         function handleInput(type) {
             if (!isStarted || !piece) return;
             if (type === 'left') { piece.x--; if(collide(board, piece)) piece.x++; }
@@ -135,8 +136,8 @@
                 piece.y--;
                 drop();
             }
-            sendData();
-            draw();
+            drawBoard(localCtx, board, piece);
+            sendData(); // 操作のたびに送信
         }
 
         function drop() {
@@ -144,58 +145,53 @@
             if (collide(board, piece)) {
                 piece.y--;
                 merge(board, piece);
-                clearLines();
+                // ライン消去
+                outer: for (let y = ROWS - 1; y >= 0; y--) {
+                    if (board[y].every(cell => cell !== 0)) {
+                        board.splice(y, 1);
+                        board.unshift(Array(COLS).fill(0));
+                        y++;
+                    }
+                }
                 piece = createPiece();
                 if (collide(board, piece)) {
                     alert("GAME OVER");
                     board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
                 }
             }
-            sendData();
-        }
-
-        function sendData() {
-            socket.send(JSON.stringify({
-                type: 'gameData',
-                roomId: roomId,
-                board: board,
-                piece: piece
-            }));
+            drawBoard(localCtx, board, piece);
+            sendData(); // 落下（自動含む）のたびに送信
         }
 
         function drawBoard(ctx, b, p) {
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-            const colors = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF'];
             
             b.forEach((row, y) => {
                 row.forEach((value, x) => {
                     if (value) {
-                        ctx.fillStyle = colors[value];
-                        ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE-1, BLOCK_SIZE-1);
+                        ctx.fillStyle = COLORS[value];
+                        ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
                     }
                 });
             });
             if(p) {
-                ctx.fillStyle = colors[p.id];
+                ctx.fillStyle = COLORS[p.id];
                 p.matrix.forEach((row, y) => {
                     row.forEach((value, x) => {
-                        if (value) ctx.fillRect((p.x + x) * BLOCK_SIZE, (p.y + y) * BLOCK_SIZE, BLOCK_SIZE-1, BLOCK_SIZE-1);
+                        if (value) ctx.fillRect((p.x + x) * BLOCK_SIZE, (p.y + y) * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
                     });
                 });
             }
         }
 
-        function draw() { drawBoard(localCtx, board, piece); }
-
         let lastTime = 0;
         function gameLoop(time = 0) {
             const deltaTime = time - lastTime;
-            if (deltaTime > 1000) {
+            if (deltaTime > 1000) { // 1秒ごとに自動落下
                 drop();
                 lastTime = time;
             }
-            draw();
             requestAnimationFrame(gameLoop);
         }
 
