@@ -1,68 +1,54 @@
 const WebSocket = require('ws');
+const wss = new WebSocket.Server({ port: process.env.PORT || 8080 });
 
-// クラウド環境（Render等）のポート、またはローカルの8080を使用
-const PORT = process.env.PORT || 8080;
-const wss = new WebSocket.Server({ port: PORT });
-
-// 部屋情報を管理 (RoomID => [ws1, ws2])
-const rooms = new Map();
+const rooms = {};
 
 wss.on('connection', (ws) => {
-    console.log('新規接続がありました');
+    // 接続した瞬間に一意のIDを割り当てる
+    ws.id = Math.random().toString(36).substring(2, 9);
+    console.log(`[接続] ユーザーID: ${ws.id}`);
 
     ws.on('message', (message) => {
-        try {
-            const data = JSON.parse(message);
+        const data = JSON.parse(message);
 
-            // ルーム入室処理
-            if (data.type === 'join') {
-                const roomId = data.roomId;
-                if (!rooms.has(roomId)) {
-                    rooms.set(roomId, []);
-                }
-                
-                const players = rooms.get(roomId);
-                if (players.length < 2) {
-                    players.push(ws);
-                    ws.roomId = roomId;
-                    console.log(`ルーム ${roomId} に入室成功`);
-                    
-                    if (players.length === 2) {
-                        // 2人揃ったら対戦開始合図を両者に送る
-                        players.forEach(client => {
-                            client.send(JSON.stringify({ type: 'start' }));
-                        });
+        // 1. ルーム入室処理
+        if (data.type === 'join') {
+            ws.roomId = data.roomId;
+            if (!rooms[data.roomId]) {
+                rooms[data.roomId] = [];
+            }
+            rooms[data.roomId].push(ws);
+            console.log(`[入室] ルーム: ${data.roomId}, ID: ${ws.id}`);
+
+            // 2人揃ったら「開始」合図を出す
+            if (rooms[data.roomId].length === 2) {
+                rooms[data.roomId].forEach(client => {
+                    client.send(JSON.stringify({ type: 'start', userId: client.id }));
+                });
+            }
+        }
+
+        // 2. ゲームデータの転送（ここが重要！）
+        if (data.type === 'gameData') {
+            if (rooms[ws.roomId]) {
+                rooms[ws.roomId].forEach(client => {
+                    // 自分以外（相手）にだけデータを送る
+                    if (client !== ws && client.readyState === WebSocket.OPEN) {
+                        // 送信者のIDを付け加えて送り返す
+                        data.sender = ws.id;
+                        client.send(JSON.stringify(data));
                     }
-                } else {
-                    ws.send(JSON.stringify({ type: 'error', message: '部屋が満員です' }));
-                }
+                });
             }
-
-            // ゲームデータの転送
-            if (data.type === 'gameData') {
-                const players = rooms.get(ws.roomId);
-                if (players) {
-                    players.forEach(client => {
-                        if (client !== ws && client.readyState === WebSocket.OPEN) {
-                            client.send(message);
-                        }
-                    });
-                }
-            }
-        } catch (e) {
-            console.error('パケット解析エラー');
         }
     });
 
     ws.on('close', () => {
-        if (ws.roomId && rooms.has(ws.roomId)) {
-            const players = rooms.get(ws.roomId);
-            rooms.set(ws.roomId, players.filter(p => p !== ws));
-            console.log(`ルーム ${ws.roomId} から退出`);
+        if (ws.roomId && rooms[ws.roomId]) {
+            rooms[ws.roomId] = rooms[ws.roomId].filter(client => client !== ws);
+            console.log(`[切断] ルーム: ${ws.roomId}, ID: ${ws.id}`);
         }
     });
 });
 
-console.log(`中継サーバーがポート ${PORT} で起動しました`);
-
-
+console.log('サーバー起動中...');
