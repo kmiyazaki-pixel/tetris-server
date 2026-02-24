@@ -3,81 +3,95 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Tetris Mobile Controller</title>
+    <title>Tetris Online Battle</title>
     <style>
-        body { background: #282c34; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
-        canvas { background: #eee; display: block; margin: 10px auto; border: 4px solid #444; }
-        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 10px; max-width: 300px; margin: 0 auto; }
-        button { background: #444; color: white; border: none; padding: 20px; font-size: 20px; border-radius: 10px; touch-action: manipulation; }
+        body { background: #282c34; color: white; text-align: center; font-family: sans-serif; margin: 0; }
+        .game-container { display: flex; justify-content: center; gap: 20px; padding: 10px; flex-wrap: wrap; }
+        canvas { background: #000; border: 2px solid #555; width: 150px; height: 300px; }
+        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 300px; margin: 10px auto; }
+        button { background: #444; color: white; border: none; padding: 20px; font-size: 18px; border-radius: 10px; touch-action: manipulation; }
         button:active { background: #666; }
         .drop { grid-column: span 3; background: #e91e63; }
-        #status { font-size: 14px; margin: 5px; color: #00ff00; height: 20px; }
+        #status { color: #00ff00; margin: 10px; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h3>Tetris Controller</h3>
-    <div id="status">サーバー接続待ち...</div>
-    <canvas id="game" width="200" height="400"></canvas>
+    <h2>Tetris Battle</h2>
+    <div id="status">接続中...</div>
+    
+    <div class="game-container">
+        <div>
+            <div>YOU</div>
+            <canvas id="localCanvas"></canvas>
+        </div>
+        <div>
+            <div>RIVAL</div>
+            <canvas id="remoteCanvas"></canvas>
+        </div>
+    </div>
 
     <div class="controls">
-        <button onclick="rotate()">回転</button>
-        <button onclick="move(0,1)">↑</button>
-        <button onclick="rotate()">回転</button>
-        <button onclick="move(-1,0)">←</button>
-        <button onclick="move(0,1)">↓</button>
-        <button onclick="move(1,0)">→</button>
-        <button class="drop" onclick="hardDrop()">即時落下 (S)</button>
+        <button onclick="sendKey('rotate')">回転</button>
+        <button onclick="sendKey('down')">↓</button>
+        <button onclick="sendKey('rotate')">回転</button>
+        <button onclick="sendKey('left')">←</button>
+        <button onclick="sendKey('down')">↓</button>
+        <button onclick="sendKey('right')">→</button>
+        <button class="drop" onclick="sendKey('hardDrop')">即時落下</button>
     </div>
 
     <script>
-        // --- 設定：RenderのURLをここに反映済みです ---
         const SERVER_URL = 'wss://tetris-server-7w6p.onrender.com';
         let socket;
-        let roomId = prompt("入室するルームIDを入力してください", "0707");
+        let roomId = prompt("ルームIDを入力してください", "0707");
+        let isStarted = false;
 
+        // ゲーム状態の管理
+        const localCanvas = document.getElementById('localCanvas');
+        const remoteCanvas = document.getElementById('remoteCanvas');
         const status = document.getElementById('status');
 
         function connect() {
             socket = new WebSocket(SERVER_URL);
-
             socket.onopen = () => {
-                status.innerText = "接続完了！ルーム " + roomId + " に入室中...";
+                status.innerText = "待機中... 相手の入室を待っています";
                 socket.send(JSON.stringify({ type: 'join', roomId: roomId }));
             };
 
             socket.onmessage = (event) => {
                 const data = JSON.parse(event.data);
+
                 if (data.type === 'start') {
-                    status.innerText = "対戦開始！操作可能です。";
+                    status.innerText = "対戦開始！";
+                    isStarted = true;
+                }
+
+                if (data.type === 'gameData') {
+                    // 相手からのデータが届いたら描画（相手が送った盤面情報を描く）
+                    if (data.sender !== socket.id) {
+                        drawBoard(remoteCanvas, data.board);
+                    }
                 }
             };
-
-            socket.onclose = () => {
-                status.innerText = "切断されました。再読み込みしてください。";
-            };
         }
 
-        // --- コントローラー送信ロジック ---
-        function sendAction(actionData) {
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({
-                    type: 'gameData',
-                    roomId: roomId,
-                    action: actionData // ここでJava側に命令を飛ばす
-                }));
-            }
+        // キー操作・ボタン操作をサーバーへ送信
+        function sendKey(action) {
+            if (!isStarted) return;
+            // サーバーへ「どのボタンを押したか」と「今の自分の盤面」を送る
+            socket.send(JSON.stringify({
+                type: 'gameData',
+                roomId: roomId,
+                action: action,
+                // 本来はここで自分の盤面計算をして送る
+                board: [] 
+            }));
         }
 
-        function move(dx, dy) {
-            sendAction({ move: { x: dx, y: dy } });
-        }
-
-        function rotate() {
-            sendAction({ rotate: true });
-        }
-
-        function hardDrop() {
-            sendAction({ hardDrop: true });
+        function drawBoard(canvas, board) {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // ここに届いたboardデータを元に四角を描く処理
         }
 
         connect();
