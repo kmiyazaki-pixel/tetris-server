@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Tetris Mobile Connect</title>
+    <style>
+        body { background: #282c34; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
+        canvas { background: #eee; display: block; margin: 10px auto; border: 4px solid #444; }
+        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 10px; max-width: 300px; margin: 0 auto; }
+        button { background: #444; color: white; border: none; padding: 20px; font-size: 20px; border-radius: 10px; touch-action: manipulation; }
+        button:active { background: #666; }
+        .drop { grid-column: span 3; background: #e91e63; }
+        #status { font-size: 14px; margin: 5px; color: #00ff00; }
+    </style>
+</head>
+<body>
+    <h3>Tetris Mobile</h3>
+    <div id="status">サーバー接続待ち...</div>
+    <canvas id="game" width="200" height="400"></canvas>
+
+    <div class="controls">
+        <button onclick="rotate()">回転</button>
+        <button onclick="move(0,-1)">↑</button>
+        <button onclick="rotate()">回転</button>
+        <button onclick="move(-1,0)">←</button>
+        <button onclick="move(0,-1)">↓</button>
+        <button onclick="move(1,0)">→</button>
+        <button class="drop" onclick="hardDrop()">即時落下 (S)</button>
+    </div>
+
+    <script>
+        // --- 設定：ここにRenderで発行されたURLを入力してください ---
+        const SERVER_URL = 'wss://あなたのURL.onrender.com'; 
+        let socket;
+        let roomId = prompt("入室するルームIDを入力してください", "1234");
+
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const status = document.getElementById('status');
+
+        // 簡易的なゲーム状態の管理
+        let board = Array(20).fill().map(() => Array(10).fill(0));
+
+        function connect() {
+            socket = new WebSocket(SERVER_URL);
+            socket.onopen = () => {
+                status.innerText = "接続完了！ルーム " + roomId + " に入室中...";
+                socket.send(JSON.stringify({ type: 'join', roomId: roomId }));
+            };
+            socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'start') {
+                    status.innerText = "対戦開始！";
+                    // ゲーム開始ロジック
+                }
+                if (data.type === 'gameData') {
+                    // PC側の画面を描画する処理など
+                    drawOpponent(data);
+                }
+            };
+            socket.onclose = () => { status.innerText = "切断されました。再読み込みしてください。"; };
+        }
+
+        // 基本操作（実際にはここからJava版と同じロジックをJSで動かします）
+        function move(dx, dy) { /* 移動処理とサーバー送信 */ sendData(); }
+        function rotate() { /* 回転処理 */ sendData(); }
+        function hardDrop() { /* 落下処理 */ sendData(); }
+
+        function sendData() {
+            if(socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'gameData',
+                    roomId: roomId,
+                    // 現在のボードや位置を送信
+                }));
+            }
+        }
+
+        connect();
+    </script>
+</body>
+</html>
