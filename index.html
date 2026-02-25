@@ -11,7 +11,7 @@
         .btn { width: 100%; padding: 15px; font-size: 18px; color: white; border: none; border-radius: 12px; cursor: pointer; margin-bottom: 12px; border-bottom: 4px solid rgba(0,0,0,0.3); font-weight: bold; }
         .btn-green { background: #4caf50; }
         .btn-blue { background: #2196f3; }
-        .btn-orange { background: #ff9800; } /* 強制開始ボタン用 */
+        .btn-orange { background: #ff9800; }
         .btn-gray { background: #666; }
         input[type="text"] { width: 100%; padding: 12px; font-size: 16px; border-radius: 8px; border: 2px solid #444; margin-bottom: 10px; text-align: center; background: #222; color: white; box-sizing: border-box; }
         #status { background: #4caf50; padding: 5px; font-weight: bold; font-size: 14px; }
@@ -22,7 +22,7 @@
         .next-panel { background: #000; border: 1px solid #555; padding: 5px; border-radius: 5px; }
         .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 90%; max-width: 340px; margin: 10px auto; }
         .ctrl-btn { background: #333; color: white; border: none; padding: 15px; font-size: 20px; border-radius: 12px; border-bottom: 4px solid #111; }
-        #countdown { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 60px; font-weight: bold; color: #ffeb3b; z-index: 3000; display: none; text-shadow: 0 0 10px #000; }
+        #countdown { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 60px; font-weight: bold; color: #ffeb3b; z-index: 3000; display: none; text-shadow: 0 0 10px #000; pointer-events: none;}
     </style>
 </head>
 <body>
@@ -41,7 +41,7 @@
     <div id="wait-overlay" class="overlay" style="display:none;">
         <div class="box">
             <h3 id="wait-msg">RIVAL WAITING...</h3>
-            <p style="font-size:12px; color:#ccc;">相手が画面に現れたらボタンを押してください</p>
+            <p style="font-size:12px; color:#ccc;">相手が現れたら「開始」を押してください</p>
             <button class="btn btn-orange" id="force-start-btn">対戦開始！</button>
         </div>
     </div>
@@ -92,59 +92,28 @@
         
         let socket, roomId, myId, isStarted = false, isFinished = false, isBoosting = false, isSolo = false;
         let iamReady = false, rivalReady = false;
+        let board = [], piece = null, nextQueue = [], remoteBoard = [], remotePiece = null, pendingAttack = 0;
 
-        // --- 1. 一人用開始 ---
-        document.getElementById('solo-btn').onclick = () => {
-            isSolo = true;
-            document.getElementById('start-overlay').style.display = 'none';
-            document.getElementById('game-layout').style.visibility = 'visible';
-            document.getElementById('remote-block').style.display = 'none';
-            document.getElementById('mode-display').innerText = "SOLO";
-            initGame();
-        };
+        const COLORS = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF', '#777777'];
+        const SHAPES = [null, [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]]];
 
-        // --- 2. 対戦ルーム接続 ---
-        document.getElementById('battle-join-btn').onclick = () => {
-            roomId = document.getElementById('room-input').value.trim();
-            if(!roomId) return alert("Room ID?");
-            isSolo = false;
-            document.getElementById('start-overlay').style.display = 'none';
-            document.getElementById('wait-overlay').style.display = 'flex';
-            connect();
-        };
+        const localCanvas = document.getElementById('localCanvas'), remoteCanvas = document.getElementById('remoteCanvas'), nextCanvas = document.getElementById('nextCanvas');
+        localCanvas.width = remoteCanvas.width = COLS * BLOCK_SIZE; localCanvas.height = remoteCanvas.height = ROWS * BLOCK_SIZE;
+        const localCtx = localCanvas.getContext('2d'), remoteCtx = remoteCanvas.getContext('2d'), nextCtx = nextCanvas.getContext('2d');
 
-        // --- 3. 強制開始トリガー ---
-        document.getElementById('force-start-btn').onclick = () => {
-            if(socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({ type: 'rematch_request', roomId })); // 再戦信号を流用して開始
-                initGame();
+        // --- ブロック生成 ---
+        function spawnPiece() {
+            if (nextQueue.length < 2) {
+                for(let i=0; i<7; i++) nextQueue.push(Math.floor(Math.random()*7)+1);
             }
-        };
-
-        function connect() {
-            socket = new WebSocket(SERVER_URL);
-            socket.onopen = () => socket.send(JSON.stringify({ type: 'join', roomId }));
-            socket.onmessage = (e) => {
-                const data = JSON.parse(e.data);
-                if (data.type === 'start') {
-                    myId = data.userId;
-                    // 自動開始（通常パターン）
-                    initGame();
-                }
-                if (data.type === 'gameData' && data.sender !== myId) {
-                    remoteBoard = data.board;
-                    remotePiece = data.piece;
-                    document.getElementById('wait-msg').innerText = "READY TO BATTLE!";
-                }
-                if (data.type === 'rematch_request' && !isStarted) {
-                    initGame(); // 相手からの開始合図でスタート
-                }
-                if (data.type === 'lose' && !isFinished) showResult(true);
-                if (data.type === 'attack') pendingAttack += data.lines;
-            };
+            const id = nextQueue.shift();
+            piece = { id, matrix: SHAPES[id], x: 3, y: 0 };
+            if (collide(board, piece)) showResult(false);
         }
 
+        // --- 初期化 ---
         function initGame() {
+            document.getElementById('start-overlay').style.display = 'none';
             document.getElementById('wait-overlay').style.display = 'none';
             document.getElementById('result-overlay').style.display = 'none';
             document.getElementById('game-layout').style.visibility = 'visible';
@@ -153,8 +122,10 @@
             isStarted = false; isFinished = false;
             board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
             remoteBoard = Array.from({length: ROWS}, () => Array(COLS).fill(0));
-            nextQueue = Array.from({length:6}, () => Math.floor(Math.random()*7)+1);
-            spawnPiece();
+            nextQueue = [];
+            for(let i=0; i<7; i++) nextQueue.push(Math.floor(Math.random()*7)+1);
+            
+            spawnPiece(); // ここで最初のピースを確実に作成
 
             const cd = document.getElementById('countdown');
             cd.style.display = "block";
@@ -173,15 +144,16 @@
             }, 800);
         }
 
-        // --- 以下共通ロジック ---
-        const localCanvas = document.getElementById('localCanvas'), remoteCanvas = document.getElementById('remoteCanvas'), nextCanvas = document.getElementById('nextCanvas');
-        localCanvas.width = remoteCanvas.width = COLS * BLOCK_SIZE; localCanvas.height = remoteCanvas.height = ROWS * BLOCK_SIZE;
-        const localCtx = localCanvas.getContext('2d'), remoteCtx = remoteCanvas.getContext('2d'), nextCtx = nextCanvas.getContext('2d');
-        const COLORS = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF', '#777777'];
-        const SHAPES = [null, [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]]];
-        let board = [], piece = null, nextQueue = [], remoteBoard = [], remotePiece = null, pendingAttack = 0;
+        // --- 操作・衝突 ---
+        function collide(b, p) {
+            for(let y=0; y<p.matrix.length; y++) {
+                for(let x=0; x<p.matrix[y].length; x++) {
+                    if(p.matrix[y][x] && (b[y+p.y] === undefined || b[y+p.y][x+p.x] === undefined || b[y+p.y][x+p.x] !== 0)) return true;
+                }
+            }
+            return false;
+        }
 
-        function spawnPiece() { const id = nextQueue.shift(); nextQueue.push(Math.floor(Math.random()*7)+1); piece = { id, matrix: SHAPES[id], x: 3, y: 0 }; if (collide(board, piece)) showResult(false); }
         function drop() {
             if (!isStarted || isFinished || !piece) return;
             piece.y++;
@@ -196,7 +168,7 @@
             }
             if(!isSolo && socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece }));
         }
-        function collide(b, p) { for(let y=0; y<p.matrix.length; y++) { for(let x=0; x<p.matrix[y].length; x++) { if(p.matrix[y][x] && (!b[y+p.y] || b[y+p.y][x+p.x]!==0)) return true; } } return false; }
+
         function handleInput(type) {
             if (!isStarted || isFinished || !piece) return;
             if (type === 'left') { piece.x--; if(collide(board, piece)) piece.x++; }
@@ -204,6 +176,45 @@
             if (type === 'rotate') { const pre = piece.matrix; piece.matrix = piece.matrix[0].map((_, i) => piece.matrix.map(row => row[i]).reverse()); if(collide(board, piece)) piece.matrix = pre; }
             if (type === 'drop') { while(!collide(board, piece)) { piece.y++; } piece.y--; drop(); }
         }
+
+        // --- モード切替 ---
+        document.getElementById('solo-btn').onclick = () => { isSolo = true; document.getElementById('mode-display').innerText = "SOLO"; initGame(); };
+        document.getElementById('battle-join-btn').onclick = () => {
+            roomId = document.getElementById('room-input').value.trim();
+            if(!roomId) return alert("Room ID?");
+            isSolo = false;
+            document.getElementById('start-overlay').style.display = 'none';
+            document.getElementById('wait-overlay').style.display = 'flex';
+            connect();
+        };
+        document.getElementById('force-start-btn').onclick = () => {
+            if(socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'rematch_request', roomId }));
+                initGame();
+            }
+        };
+
+        function connect() {
+            socket = new WebSocket(SERVER_URL);
+            socket.onopen = () => socket.send(JSON.stringify({ type: 'join', roomId }));
+            socket.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                if (data.type === 'start') { myId = data.userId; initGame(); }
+                if (data.type === 'gameData' && data.sender !== myId) { remoteBoard = data.board; remotePiece = data.piece; document.getElementById('wait-msg').innerText = "READY TO BATTLE!"; }
+                if (data.type === 'rematch_request' && !isStarted) initGame();
+                if (data.type === 'lose' && !isFinished) showResult(true);
+                if (data.type === 'attack') pendingAttack += data.lines;
+            };
+        }
+
+        function showResult(win) {
+            isFinished = true; isStarted = false; bgm.pause();
+            document.getElementById('result-text').innerText = isSolo ? "FINISH" : (win ? "WIN!" : "LOSE");
+            document.getElementById('result-overlay').style.display = "flex";
+            if(!isSolo && !win) socket.send(JSON.stringify({ type: 'lose', roomId }));
+        }
+
+        // --- 描画ループ ---
         function drawBoard(ctx, b, p) {
             ctx.fillStyle = '#000'; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height); ctx.strokeStyle = '#222';
             for(let i=0;i<=COLS;i++){ctx.beginPath();ctx.moveTo(i*BLOCK_SIZE,0);ctx.lineTo(i*BLOCK_SIZE,ROWS*BLOCK_SIZE);ctx.stroke();}
@@ -213,21 +224,27 @@
         }
         function drawNext() {
             nextCtx.fillStyle = '#000'; nextCtx.fillRect(0,0,40,40);
+            if(!nextQueue[0]) return;
             const id = nextQueue[0]; const m = SHAPES[id]; const s = 8; nextCtx.fillStyle = COLORS[id];
             m.forEach((row,y)=>{row.forEach((v,x)=>{if(v)nextCtx.fillRect(x*s+10,y*s+10,s-1,s-1);})});
-        }
-        function showResult(win) {
-            isFinished = true; isStarted = false; bgm.pause();
-            document.getElementById('result-text').innerText = isSolo ? "FINISH" : (win ? "WIN!" : "LOSE");
-            document.getElementById('result-overlay').style.display = "flex";
-            if(!isSolo && !win) socket.send(JSON.stringify({ type: 'lose', roomId }));
         }
 
         const bBtn=document.getElementById('boost-btn');
         bBtn.onmousedown=bBtn.ontouchstart=(e)=>{e.preventDefault();isBoosting=true;};
         bBtn.onmouseup=bBtn.ontouchend=()=>isBoosting=false;
+        
         let lastTime=0, dropCounter=0;
-        function gameLoop(time=0){const dt=time-lastTime;lastTime=time;if(isStarted&&!isFinished){dropCounter+=dt;if(dropCounter>(isBoosting?50:800)){drop();dropCounter=0;}}drawBoard(localCtx,board,piece);if(!isSolo)drawBoard(remoteCtx,remoteBoard,remotePiece);drawNext();requestAnimationFrame(gameLoop);}
+        function gameLoop(time=0){
+            const dt=time-lastTime; lastTime=time;
+            if(isStarted && !isFinished){
+                dropCounter += dt;
+                if(dropCounter > (isBoosting ? 50 : 800)){ drop(); dropCounter = 0; }
+            }
+            drawBoard(localCtx, board, piece);
+            if(!isSolo) drawBoard(remoteCtx, remoteBoard, remotePiece);
+            drawNext();
+            requestAnimationFrame(gameLoop);
+        }
         gameLoop();
     </script>
 </body>
