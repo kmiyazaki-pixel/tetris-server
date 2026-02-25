@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Tetris Battle - Step 2: Next 3</title>
+    <title>Tetris Battle - Fixed</title>
     <style>
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
         #status { background: #4caf50; padding: 10px; font-weight: bold; font-size: 18px; min-height: 24px; }
@@ -60,9 +60,14 @@
             document.getElementById('next2').getContext('2d')
         ];
 
+        document.getElementById('localCanvas').width = COLS * BLOCK_SIZE;
+        document.getElementById('localCanvas').height = ROWS * BLOCK_SIZE;
+        document.getElementById('remoteCanvas').width = COLS * BLOCK_SIZE;
+        document.getElementById('remoteCanvas').height = ROWS * BLOCK_SIZE;
+
         let board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
         let piece = null;
-        let nextQueue = []; // ★ブロックの順番待ちリスト
+        let nextQueue = []; 
         let remoteBoard = Array.from({length: ROWS}, () => Array(COLS).fill(0));
         let remotePiece = null;
         let pendingAttack = 0;
@@ -82,15 +87,18 @@
                 const data = JSON.parse(e.data);
                 if (data.type === 'start') {
                     isStarted = true; isFinished = false; myId = data.userId;
-                    document.getElementById('status').innerText = "対戦中！"; document.getElementById('status').className = "";
+                    document.getElementById('status').innerText = "対戦中！"; 
+                    document.getElementById('status').className = "";
                     board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
                     
-                    // ★最初に4個分生成しておく（1個目を使う用、残り3個をNEXT表示用）
+                    // ★ 修正ポイント：キューを確実に初期化
                     nextQueue = [];
-                    for(let i=0; i<4; i++) nextQueue.push(Math.floor(Math.random() * 7) + 1);
-                    
-                    piece = { id: nextQueue.shift(), matrix: SHAPES[nextQueue[0]], x: 3, y: 0 }; // 修正：初期化
-                    piece.matrix = SHAPES[piece.id]; // 確実に代入
+                    for(let i=0; i<4; i++) {
+                        nextQueue.push(Math.floor(Math.random() * 7) + 1);
+                    }
+                    // 最初の1個目を取り出す
+                    const firstId = nextQueue.shift();
+                    piece = { id: firstId, matrix: SHAPES[firstId], x: 3, y: 0 };
                     
                     requestAnimationFrame(gameLoop);
                 }
@@ -100,6 +108,7 @@
                 }
                 if (data.type === 'attack' && !isFinished) {
                     pendingAttack += data.lines;
+                    document.getElementById('status').innerText = "⚠️ 攻撃警告: " + pendingAttack + "行";
                 }
             };
         }
@@ -112,21 +121,28 @@
                 if (!id) return;
                 const matrix = SHAPES[id];
                 ctx.fillStyle = COLORS[id];
-                const s = 10;
+                const s = 8; // 少し小さくして中央寄せ
+                const offset = (40 - matrix[0].length * s) / 2;
                 matrix.forEach((row, y) => {
                     row.forEach((v, x) => {
-                        if(v) ctx.fillRect(x*s + 5, y*s + 5, s-1, s-1);
+                        if(v) ctx.fillRect(x*s + offset, y*s + 10, s-1, s-1);
                     });
                 });
             });
         }
 
         function drop() {
-            if (!isStarted || isFinished) return;
+            if (!isStarted || isFinished || !piece) return;
             piece.y++;
             if (collide(board, piece)) {
                 piece.y--;
-                piece.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v) board[y+piece.y][x+piece.x] = piece.id; }); });
+                piece.matrix.forEach((row, y) => { 
+                    row.forEach((v, x) => { 
+                        if(v) {
+                            if(board[y+piece.y]) board[y+piece.y][x+piece.x] = piece.id; 
+                        }
+                    }); 
+                });
                 
                 let cleared = 0;
                 for (let y = ROWS - 1; y >= 0; y--) {
@@ -144,9 +160,10 @@
                         board.push(row);
                     }
                     pendingAttack = 0;
+                    document.getElementById('status').innerText = "対戦中！";
                 }
 
-                // ★キューから取り出し、新しく末尾に追加
+                // ★ 次のブロックへ
                 const nextId = nextQueue.shift();
                 nextQueue.push(Math.floor(Math.random() * 7) + 1);
                 piece = { id: nextId, matrix: SHAPES[nextId], x: 3, y: 0 };
@@ -156,7 +173,32 @@
             sync();
         }
 
-        // --- 以下共通ロジック ---
+        function collide(b, p) {
+            for (let y = 0; y < p.matrix.length; y++) {
+                for (let x = 0; x < p.matrix[y].length; x++) {
+                    if (p.matrix[y][x]) {
+                        if (!b[y + p.y] || b[y + p.y][x + p.x] === undefined || b[y + p.y][x + p.x] !== 0) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function handleInput(type) {
+            if (!isStarted || isFinished || !piece) return;
+            if (type === 'left') { piece.x--; if(collide(board, piece)) piece.x++; }
+            if (type === 'right') { piece.x++; if(collide(board, piece)) piece.x--; }
+            if (type === 'rotate') { 
+                const pre = piece.matrix; piece.matrix = matrixRotate(piece.matrix); 
+                if(collide(board, piece)) piece.matrix = pre; 
+            }
+            if (type === 'drop') { while(!collide(board, piece)) { piece.y++; } piece.y--; drop(); }
+            sync();
+        }
+
+        function matrixRotate(matrix) { return matrix[0].map((_, i) => matrix.map(row => row[i]).reverse()); }
+        function sync() { if (socket.readyState === WebSocket.OPEN && isStarted && !isFinished) socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece })); }
+
         function showResult(win) {
             if (isFinished) return;
             isFinished = true; isStarted = false;
@@ -164,24 +206,7 @@
             if (win) { s.innerText = "✨ あなたの勝ちです！ ✨"; s.className = "win-screen"; }
             else { s.innerText = "あなたは負けました..."; s.className = "lose-screen"; socket.send(JSON.stringify({ type: 'lose', roomId })); }
         }
-        function collide(b, p) {
-            for (let y = 0; y < p.matrix.length; y++) {
-                for (let x = 0; x < p.matrix[y].length; x++) {
-                    if (p.matrix[y][x] && (b[y + p.y] && b[y + p.y][x + p.x]) !== 0) return true;
-                }
-            }
-            return false;
-        }
-        function handleInput(type) {
-            if (!isStarted || isFinished) return;
-            if (type === 'left') { piece.x--; if(collide(board, piece)) piece.x++; }
-            if (type === 'right') { piece.x++; if(collide(board, piece)) piece.x--; }
-            if (type === 'rotate') { const pre = piece.matrix; piece.matrix = matrixRotate(piece.matrix); if(collide(board, piece)) piece.matrix = pre; }
-            if (type === 'drop') { while(!collide(board, piece)) { piece.y++; } piece.y--; drop(); }
-            sync();
-        }
-        function matrixRotate(matrix) { return matrix[0].map((_, i) => matrix.map(row => row[i]).reverse()); }
-        function sync() { if (socket.readyState === WebSocket.OPEN && isStarted && !isFinished) socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece })); }
+
         function drawBoard(ctx, b, p) {
             ctx.fillStyle = '#000'; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
             ctx.strokeStyle = '#222';
@@ -190,6 +215,7 @@
             b.forEach((row, y) => { row.forEach((v, x) => { if(v) { ctx.fillStyle = COLORS[v]; ctx.fillRect(x*BLOCK_SIZE+1, y*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); } }); });
             if(p) { ctx.fillStyle = COLORS[p.id]; p.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect((p.x+x)*BLOCK_SIZE+1, (p.y+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); }); }); }
         }
+
         let lastTime = 0, dropCounter = 0, syncCounter = 0;
         function gameLoop(time = 0) {
             const dt = time - lastTime; lastTime = time;
