@@ -3,25 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Tetris Battle Final</title>
+    <title>Tetris Battle - Step 1: Next</title>
     <style>
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
-        #status { background: #4caf50; padding: 10px; font-weight: bold; font-size: 18px; min-height: 24px; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
-        .win-screen { background: #ffc107 !important; color: #000 !important; font-size: 24px !important; }
-        .lose-screen { background: #f44336 !important; color: #fff !important; font-size: 24px !important; }
-        .game-area { display: flex; justify-content: center; gap: 10px; margin-top: 15px; }
+        #status { background: #4caf50; padding: 10px; font-weight: bold; font-size: 18px; min-height: 24px; }
+        .win-screen { background: #ffc107 !important; color: #000 !important; }
+        .lose-screen { background: #f44336 !important; color: #fff !important; }
+        
+        /* レイアウト調整 */
+        .main-layout { display: flex; justify-content: center; align-items: flex-start; gap: 10px; margin-top: 10px; }
+        
+        /* NEXT表示窓 */
+        .next-box { border: 2px solid #555; background: #000; padding: 5px; width: 50px; }
+        .next-label { font-size: 10px; color: #aaa; margin-bottom: 5px; }
+        #nextCanvas { background: #000; width: 40px; height: 40px; }
+
+        .game-area { display: flex; gap: 10px; }
         canvas { background: #000; border: 2px solid #444; width: 140px; height: 280px; }
-        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 90%; max-width: 320px; margin: 20px auto; }
+        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 90%; max-width: 320px; margin: 15px auto; }
         button { background: #333; color: white; border: none; padding: 20px; font-size: 20px; border-radius: 12px; border-bottom: 4px solid #111; touch-action: manipulation; }
-        button:active { border-bottom: 0; transform: translateY(4px); }
     </style>
 </head>
 <body>
-    <div id="status">サーバー接続中...</div>
-    <div class="game-area">
-        <div><div>YOU</div><canvas id="localCanvas"></canvas></div>
-        <div><div>RIVAL</div><canvas id="remoteCanvas"></canvas></div>
+    <div id="status">ルームIDを入力して接続...</div>
+    
+    <div class="main-layout">
+        <div class="next-box">
+            <div class="next-label">NEXT</div>
+            <canvas id="nextCanvas" width="40" height="40"></canvas>
+        </div>
+
+        <div class="game-area">
+            <div><div style="font-size:10px">YOU</div><canvas id="localCanvas"></canvas></div>
+            <div><div style="font-size:10px">RIVAL</div><canvas id="remoteCanvas"></canvas></div>
+        </div>
     </div>
+
     <div class="controls">
         <button onclick="handleInput('left')">←</button>
         <button style="background:#2196f3" onclick="handleInput('rotate')">回転</button>
@@ -36,98 +53,75 @@
         
         const localCtx = document.getElementById('localCanvas').getContext('2d');
         const remoteCtx = document.getElementById('remoteCanvas').getContext('2d');
-        document.querySelectorAll('canvas').forEach(c => { c.width = COLS * BLOCK_SIZE; c.height = ROWS * BLOCK_SIZE; });
+        const nextCtx = document.getElementById('nextCanvas').getContext('2d');
+        
+        // メインキャンバスの解像度設定
+        document.getElementById('localCanvas').width = COLS * BLOCK_SIZE;
+        document.getElementById('localCanvas').height = ROWS * BLOCK_SIZE;
+        document.getElementById('remoteCanvas').width = COLS * BLOCK_SIZE;
+        document.getElementById('remoteCanvas').height = ROWS * BLOCK_SIZE;
 
         let board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
         let piece = null;
+        let nextPieceId = null; // ★次に来るブロックのIDを保持
         let remoteBoard = Array.from({length: ROWS}, () => Array(COLS).fill(0));
         let remotePiece = null;
         let pendingAttack = 0;
 
         const COLORS = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF', '#777777'];
+        const SHAPES = [null, [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]]];
 
         function connect() {
-            roomId = prompt("ルームIDを入力してください", "0707");
+            roomId = prompt("ルームID", "0707");
             if(!roomId) return;
             socket = new WebSocket(SERVER_URL);
-            
             socket.onopen = () => {
                 document.getElementById('status').innerText = "相手を待っています...";
                 socket.send(JSON.stringify({ type: 'join', roomId: roomId }));
             };
-
             socket.onmessage = (e) => {
                 const data = JSON.parse(e.data);
-                
                 if (data.type === 'start') {
                     isStarted = true; isFinished = false; myId = data.userId;
                     document.getElementById('status').innerText = "対戦中！";
                     document.getElementById('status').className = "";
                     board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
-                    piece = createPiece();
+                    
+                    // ★初期ブロックと次のブロックを生成
+                    piece = createNewPiece();
+                    nextPieceId = Math.floor(Math.random() * 7) + 1;
+                    
                     requestAnimationFrame(gameLoop);
                 }
-                
-                // 相手が負けた（自分が勝った）判定
-                if (data.type === 'lose' && !isFinished) {
-                    showResult(true);
+                if (data.type === 'lose' && !isFinished) showResult(true);
+                if (data.type === 'gameData' && data.sender !== myId) {
+                    remoteBoard = data.board; remotePiece = data.piece;
                 }
-
-                if (data.type === 'gameData' && data.sender !== myId && !isFinished) {
-                    remoteBoard = data.board;
-                    remotePiece = data.piece;
-                }
-                
-                if (data.type === 'attack' && !isFinished) {
+                if (data.type === 'attack') {
                     pendingAttack += data.lines;
-                    document.getElementById('status').innerText = "⚠️ 攻撃警告: " + pendingAttack + "行";
                 }
             };
         }
 
-        function showResult(win) {
-            if (isFinished) return;
-            isFinished = true;
-            isStarted = false;
-            const s = document.getElementById('status');
-            if (win) {
-                s.innerText = "✨ あなたの勝ちです！ ✨";
-                s.className = "win-screen";
-            } else {
-                s.innerText = "あなたは負けました...";
-                s.className = "lose-screen";
-                socket.send(JSON.stringify({ type: 'lose', roomId }));
-            }
-        }
-
-        function createPiece() {
-            const SHAPES = [null, [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]]];
+        function createNewPiece() {
             const id = Math.floor(Math.random() * 7) + 1;
             return { id, matrix: SHAPES[id], x: 3, y: 0 };
         }
 
-        function collide(b, p) {
-            for (let y = 0; y < p.matrix.length; y++) {
-                for (let x = 0; x < p.matrix[y].length; x++) {
-                    if (p.matrix[y][x] && (b[y + p.y] && b[y + p.y][x + p.x]) !== 0) return true;
-                }
-            }
-            return false;
+        function drawNext() {
+            nextCtx.fillStyle = '#000';
+            nextCtx.fillRect(0, 0, 40, 40);
+            if (!nextPieceId) return;
+            
+            const matrix = SHAPES[nextPieceId];
+            nextCtx.fillStyle = COLORS[nextPieceId];
+            const s = 10; // NEXT窓内でのブロックサイズ
+            matrix.forEach((row, y) => {
+                row.forEach((v, x) => {
+                    if(v) nextCtx.fillRect(x*s + 5, y*s + 5, s-1, s-1);
+                });
+            });
         }
-
-        function handleInput(type) {
-            if (!isStarted || isFinished) return;
-            if (type === 'left') { piece.x--; if(collide(board, piece)) piece.x++; }
-            if (type === 'right') { piece.x++; if(collide(board, piece)) piece.x--; }
-            if (type === 'rotate') { 
-                const pre = piece.matrix; piece.matrix = rotateMatrix(piece.matrix); 
-                if(collide(board, piece)) piece.matrix = pre; 
-            }
-            if (type === 'drop') { while(!collide(board, piece)) { piece.y++; } piece.y--; drop(); }
-            sync();
-        }
-
-        function rotateMatrix(matrix) { return matrix[0].map((_, i) => matrix.map(row => row[i]).reverse()); }
 
         function drop() {
             if (!isStarted || isFinished) return;
@@ -136,6 +130,7 @@
                 piece.y--;
                 piece.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v) board[y+piece.y][x+piece.x] = piece.id; }); });
                 
+                // 消去と攻撃の処理
                 let cleared = 0;
                 for (let y = ROWS - 1; y >= 0; y--) {
                     if (board[y].every(cell => cell !== 0)) {
@@ -143,9 +138,7 @@
                         cleared++; y++;
                     }
                 }
-                if (cleared >= 2) {
-                    socket.send(JSON.stringify({ type: 'attack', roomId, lines: cleared - 1 }));
-                }
+                if (cleared >= 2) socket.send(JSON.stringify({ type: 'attack', roomId, lines: cleared - 1 }));
 
                 if (pendingAttack > 0) {
                     for (let i = 0; i < pendingAttack; i++) {
@@ -154,34 +147,53 @@
                         board.push(row);
                     }
                     pendingAttack = 0;
-                    document.getElementById('status').innerText = "対戦中！";
                 }
 
-                piece = createPiece();
-                if (collide(board, piece)) { 
-                    showResult(false);
-                }
+                // ★NEXTを現在のピースにし、新しいNEXTを生成
+                piece = { id: nextPieceId, matrix: SHAPES[nextPieceId], x: 3, y: 0 };
+                nextPieceId = Math.floor(Math.random() * 7) + 1;
+                
+                if (collide(board, piece)) showResult(false);
             }
             sync();
         }
 
-        function sync() {
-            if (socket && socket.readyState === WebSocket.OPEN && isStarted) {
-                socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece }));
+        // --- 以下共通ロジック ---
+        function collide(b, p) {
+            for (let y = 0; y < p.matrix.length; y++) {
+                for (let x = 0; x < p.matrix[y].length; x++) {
+                    if (p.matrix[y][x] && (b[y + p.y] && b[y + p.y][x + p.x]) !== 0) return true;
+                }
             }
+            return false;
         }
-
+        function handleInput(type) {
+            if (!isStarted || isFinished) return;
+            if (type === 'left') { piece.x--; if(collide(board, piece)) piece.x++; }
+            if (type === 'right') { piece.x++; if(collide(board, piece)) piece.x--; }
+            if (type === 'rotate') { 
+                const pre = piece.matrix; piece.matrix = matrixRotate(piece.matrix); 
+                if(collide(board, piece)) piece.matrix = pre; 
+            }
+            if (type === 'drop') { while(!collide(board, piece)) { piece.y++; } piece.y--; drop(); }
+            sync();
+        }
+        function matrixRotate(matrix) { return matrix[0].map((_, i) => matrix.map(row => row[i]).reverse()); }
+        function sync() { if (socket.readyState === WebSocket.OPEN && isStarted) socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece })); }
+        function showResult(win) {
+            isFinished = true; isStarted = false;
+            const s = document.getElementById('status');
+            if (win) { s.innerText = "✨ あなたの勝ちです！ ✨"; s.className = "win-screen"; }
+            else { s.innerText = "あなたは負けました..."; s.className = "lose-screen"; socket.send(JSON.stringify({ type: 'lose', roomId })); }
+        }
         function drawBoard(ctx, b, p) {
             ctx.fillStyle = '#000'; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
             ctx.strokeStyle = '#222';
             for(let x=0; x<=COLS*BLOCK_SIZE; x+=BLOCK_SIZE) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,ROWS*BLOCK_SIZE); ctx.stroke(); }
             for(let y=0; y<=ROWS*BLOCK_SIZE; y+=BLOCK_SIZE) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(COLS*BLOCK_SIZE,y); ctx.stroke(); }
-            b.forEach((row, y) => { row.forEach((v, x) => { if(v) { 
-                ctx.fillStyle = COLORS[v]; ctx.fillRect(x*BLOCK_SIZE+1, y*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); 
-            } }); });
+            b.forEach((row, y) => { row.forEach((v, x) => { if(v) { ctx.fillStyle = COLORS[v]; ctx.fillRect(x*BLOCK_SIZE+1, y*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); } }); });
             if(p) { ctx.fillStyle = COLORS[p.id]; p.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect((p.x+x)*BLOCK_SIZE+1, (p.y+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); }); }); }
         }
-
         let lastTime = 0, dropCounter = 0, syncCounter = 0;
         function gameLoop(time = 0) {
             const dt = time - lastTime; lastTime = time;
@@ -192,6 +204,7 @@
             }
             drawBoard(localCtx, board, piece);
             drawBoard(remoteCtx, remoteBoard, remotePiece);
+            drawNext(); // ★NEXTの描画
             requestAnimationFrame(gameLoop);
         }
         connect();
