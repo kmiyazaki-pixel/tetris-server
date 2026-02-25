@@ -3,36 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Tetris Battle & Solo</title>
+    <title>Tetris Battle & Solo - Grid Fixed</title>
     <style>
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; touch-action: manipulation; }
-        
-        /* オーバーレイの重なりを整理 */
         .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #1a1a1a; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 2000; }
         .box { background: #333; padding: 25px; border-radius: 20px; width: 85%; max-width: 300px; }
-        
-        /* ボタンを押しやすく */
-        .btn { width: 100%; padding: 15px; font-size: 18px; color: white; border: none; border-radius: 12px; cursor: pointer; margin-bottom: 12px; border-bottom: 4px solid rgba(0,0,0,0.3); font-weight: bold; -webkit-appearance: none; }
+        .btn { width: 100%; padding: 15px; font-size: 18px; color: white; border: none; border-radius: 12px; cursor: pointer; margin-bottom: 12px; border-bottom: 4px solid rgba(0,0,0,0.3); font-weight: bold; }
         .btn-green { background: #4caf50; }
         .btn-blue { background: #2196f3; }
         .btn-gray { background: #666; }
         .btn:active { transform: translateY(2px); border-bottom-width: 2px; }
-
         input[type="text"] { width: 100%; padding: 12px; font-size: 16px; border-radius: 8px; border: 2px solid #444; margin-bottom: 10px; text-align: center; background: #222; color: white; }
-        
-        /* ゲーム画面 */
         #status { background: #4caf50; padding: 5px; font-weight: bold; font-size: 14px; height: 20px; }
         .top-controls { display: flex; justify-content: space-around; align-items: center; background: #222; padding: 10px; font-size: 12px; }
-        .main-layout { display: flex; justify-content: center; align-items: flex-start; gap: 8px; margin-top: 10px; visibility: hidden; } /* 開始まで隠す */
-        
+        .main-layout { display: flex; justify-content: center; align-items: flex-start; gap: 8px; margin-top: 10px; visibility: hidden; }
         canvas { background: #000; border: 2px solid #444; }
         .game-canvas { width: 120px; height: 240px; }
-        
-        /* 操作パネル */
         .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 90%; max-width: 340px; margin: 15px auto; }
         .ctrl-btn { background: #333; color: white; border: none; padding: 15px; font-size: 20px; border-radius: 12px; border-bottom: 4px solid #111; }
-        
-        /* カウントダウン */
         #countdown { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 60px; font-weight: bold; color: #ffeb3b; z-index: 3000; display: none; pointer-events: none; }
     </style>
 </head>
@@ -80,7 +68,7 @@
 
     <div class="controls">
         <button class="ctrl-btn" id="l-btn">←</button>
-        <button class="ctrl-btn" id="r-btn" style="background:#2196f3">回</button>
+        <button class="ctrl-btn" id="r-btn" style="background:#2196f3">回転</button>
         <button class="ctrl-btn" id="ri-btn">→</button>
         <button class="ctrl-btn" id="d-btn" style="grid-column:span 3; background:#f44336; font-size:14px;">即落下</button>
         <button class="ctrl-btn boost-btn" id="boost-btn" style="grid-column:span 3; background:#ff9800; font-size:14px;">加速（長押し）</button>
@@ -94,7 +82,6 @@
         let socket, roomId, myId, isStarted = false, isFinished = false, isBoosting = false, isSolo = false;
         let iamReady = false, rivalReady = false;
 
-        // --- ボタンイベントの確実な紐付け ---
         document.getElementById('solo-btn').onclick = () => {
             isSolo = true;
             document.getElementById('remote-block').style.display = 'none';
@@ -128,7 +115,6 @@
             if(isSolo) initGame();
         }
 
-        // --- 通信ロジック ---
         function connect() {
             socket = new WebSocket(SERVER_URL);
             socket.onmessage = (e) => {
@@ -146,21 +132,17 @@
             socket.onopen = () => socket.send(JSON.stringify({ type: 'join', roomId }));
         }
 
-        // --- ゲーム管理 ---
         function initGame() {
             document.getElementById('result-overlay').style.display = 'none';
             iamReady = false; rivalReady = false;
-            document.getElementById('rematch-status').innerText = "";
             isStarted = false; isFinished = false;
             board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
             remoteBoard = Array.from({length: ROWS}, () => Array(COLS).fill(0));
             nextQueue = Array.from({length:6}, () => Math.floor(Math.random()*7)+1);
             spawnPiece();
-            
             const cd = document.getElementById('countdown');
             cd.innerText = "Ready..."; cd.style.display = "block";
             if(document.getElementById('music-toggle').checked) bgm.play().catch(()=>{});
-
             setTimeout(() => {
                 cd.innerText = "GO!";
                 setTimeout(() => { cd.style.display = "none"; isStarted = true; }, 800);
@@ -172,15 +154,10 @@
             isFinished = true; isStarted = false; bgm.pause();
             const rt = document.getElementById('result-text');
             if (isSolo) { rt.innerText = "FINISH"; rt.style.color = "white"; }
-            else { 
-                rt.innerText = win ? "WIN!" : "LOSE"; 
-                rt.style.color = win ? "#ffc107" : "#f44336";
-                if(!win) socket.send(JSON.stringify({ type: 'lose', roomId }));
-            }
+            else { rt.innerText = win ? "WIN!" : "LOSE"; rt.style.color = win ? "#ffc107" : "#f44336"; if(!win) socket.send(JSON.stringify({ type: 'lose', roomId })); }
             document.getElementById('result-overlay').style.display = "flex";
         }
 
-        // --- テトリスコア ---
         const localCanvas = document.getElementById('localCanvas'), remoteCanvas = document.getElementById('remoteCanvas');
         localCanvas.width = remoteCanvas.width = COLS * BLOCK_SIZE;
         localCanvas.height = remoteCanvas.height = ROWS * BLOCK_SIZE;
@@ -214,9 +191,26 @@
             if(!isSolo) sync();
         }
         function sync() { if (socket?.readyState === WebSocket.OPEN && isStarted) socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece })); }
-        function drawBoard(ctx, b, p) { ctx.fillStyle = '#000'; ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height); if(b) b.forEach((row, y) => { row.forEach((v, x) => { if(v){ ctx.fillStyle = COLORS[v]; ctx.fillRect(x*BLOCK_SIZE+1, y*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); } }); }); if(p){ ctx.fillStyle = COLORS[p.id]; p.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect((p.x+x)*BLOCK_SIZE+1, (p.y+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); }); }); } }
+
+        // --- グリッド線描画を追加 ---
+        function drawBoard(ctx, b, p) {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            
+            // マス目の線を描画
+            ctx.strokeStyle = '#222'; // 線の色
+            ctx.lineWidth = 1;
+            for(let i = 0; i <= COLS; i++) {
+                ctx.beginPath(); ctx.moveTo(i * BLOCK_SIZE, 0); ctx.lineTo(i * BLOCK_SIZE, ROWS * BLOCK_SIZE); ctx.stroke();
+            }
+            for(let i = 0; i <= ROWS; i++) {
+                ctx.beginPath(); ctx.moveTo(0, i * BLOCK_SIZE); ctx.lineTo(COLS * BLOCK_SIZE, i * BLOCK_SIZE); ctx.stroke();
+            }
+
+            if(b) b.forEach((row, y) => { row.forEach((v, x) => { if(v){ ctx.fillStyle = COLORS[v]; ctx.fillRect(x*BLOCK_SIZE+1, y*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); } }); });
+            if(p){ ctx.fillStyle = COLORS[p.id]; p.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect((p.x+x)*BLOCK_SIZE+1, (p.y+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); }); }); }
+        }
         
-        // --- 操作イベント ---
         document.getElementById('l-btn').onclick = () => handleInput('left');
         document.getElementById('r-btn').onclick = () => handleInput('rotate');
         document.getElementById('ri-btn').onclick = () => handleInput('right');
@@ -228,10 +222,7 @@
         let lastTime = 0, dropCounter = 0;
         function gameLoop(time = 0) {
             const dt = time - lastTime; lastTime = time;
-            if (isStarted && !isFinished) {
-                dropCounter += dt;
-                if (dropCounter > (isBoosting ? 50 : 800)) { drop(); dropCounter = 0; }
-            }
+            if (isStarted && !isFinished) { dropCounter += dt; if (dropCounter > (isBoosting ? 50 : 800)) { drop(); dropCounter = 0; } }
             drawBoard(localCtx, board, piece);
             if(!isSolo) drawBoard(remoteCtx, remoteBoard, remotePiece);
             requestAnimationFrame(gameLoop);
