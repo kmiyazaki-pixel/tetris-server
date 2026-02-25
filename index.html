@@ -3,36 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>テトリス・インフェルノ - 完結</title>
+    <title>テトリス・インフェルノ - 極・完全版</title>
     <style>
-        /* 1. 物理的に「選択」という概念をブラウザから奪う */
+        /* 青い選択を完全に封印 */
         * {
             -webkit-user-select: none !important;
-            -moz-user-select: none !important;
-            -ms-user-select: none !important;
             user-select: none !important;
             -webkit-touch-callout: none !important;
-            -webkit-tap-highlight-color: rgba(0,0,0,0) !important; /* タップ時の青枠を透明化 */
-            outline: none !important;
+            -webkit-tap-highlight-color: rgba(0,0,0,0) !important;
         }
-
-        /* 2. 入力欄だけは触れるようにする */
-        input {
-            -webkit-user-select: auto !important;
-            user-select: auto !important;
-        }
+        input { -webkit-user-select: auto !important; user-select: auto !important; }
 
         body { 
-            background: #000; 
-            color: white; 
-            text-align: center; 
-            font-family: sans-serif; 
-            margin: 0; 
-            overflow: hidden; 
-            position: fixed; /* 画面が引っ張られるのを防ぐ */
-            width: 100%;
-            height: 100%;
-            touch-action: none; /* ブラウザのスクロール・ズームを全停止 */
+            background: #000; color: white; text-align: center; font-family: sans-serif; 
+            margin: 0; overflow: hidden; position: fixed; width: 100%; height: 100%; touch-action: none; 
         }
 
         .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 2000; }
@@ -44,9 +28,10 @@
         .info-panel { display: flex; justify-content: space-around; background: #111; padding: 10px; font-size: 12px; border-bottom: 1px solid #333; }
         .stat-val { color: #ffeb3b; display: block; font-size: 16px; font-weight: bold; }
         
-        .main-layout { display: flex; justify-content: center; align-items: center; margin-top: 10px; visibility: hidden; }
+        .main-layout { display: flex; justify-content: center; align-items: flex-end; margin-top: 10px; visibility: hidden; }
         canvas { background: #000; border: 2px solid #333; }
         .game-canvas { width: 150px; height: 300px; }
+        .remote-canvas { width: 80px; height: 160px; opacity: 0.6; border-color: #555; }
         
         .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 90%; max-width: 360px; margin: 15px auto; }
         .ctrl-btn { background: #333; color: white; border: none; padding: 20px; font-size: 24px; border-radius: 15px; border-bottom: 5px solid #000; touch-action: none; }
@@ -55,13 +40,15 @@
         #countdown { position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%); font-size: 70px; font-weight: bold; color: #f44336; z-index: 3000; display: none; }
     </style>
 </head>
-<body oncontextmenu="return false;"> <audio id="bgm" loop><source src="Tetris DS OST - Mario Tetris.mp3" type="audio/mpeg"></audio>
+<body oncontextmenu="return false;">
+    <audio id="bgm" loop><source src="Tetris DS OST - Mario Tetris.mp3" type="audio/mpeg"></audio>
 
     <div id="start-overlay" class="overlay">
         <div class="box">
             <h1 style="color:#f44336; margin:0;">煉獄モード</h1>
             <button class="btn btn-red" id="solo-btn">一人で地獄へ</button>
-            <input type="text" id="room-input" placeholder="合言葉">
+            <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
+            <input type="text" id="room-input" placeholder="合言葉" style="width:100%; padding:10px; margin-bottom:10px; background:#000; color:#fff; border:1px solid #444; box-sizing:border-box;">
             <button class="btn btn-blue" id="battle-btn">対戦開始</button>
         </div>
     </div>
@@ -69,6 +56,7 @@
     <div id="result-overlay" class="overlay" style="display:none;">
         <div class="box">
             <h2 id="result-text" style="color:#f44336;">終了</h2>
+            <p>スコア: <span id="final-score" style="color:#ffeb3b">0</span></p>
             <button class="btn btn-blue" onclick="location.reload()">もう一度</button>
         </div>
     </div>
@@ -82,13 +70,18 @@
     </div>
 
     <div class="main-layout" id="game-layout">
-        <div style="margin-right:10px;">
+        <div style="margin-right:10px; text-align:center;">
+            <div style="font-size:10px; color:#aaa;">次</div>
             <canvas id="nextCanvas" width="40" height="40"></canvas>
         </div>
-        <div id="remote-area" style="display:none; margin-right:10px;">
-            <canvas id="remoteCanvas" style="width:60px; height:120px; opacity:0.5;"></canvas>
+        <div>
+            <div style="font-size:10px; color:#aaa;">自分</div>
+            <canvas id="localCanvas" class="game-canvas"></canvas>
         </div>
-        <canvas id="localCanvas" class="game-canvas"></canvas>
+        <div id="remote-area" style="display:none; margin-left:10px;">
+            <div style="font-size:10px; color:#aaa;">相手</div>
+            <canvas id="remoteCanvas" class="remote-canvas"></canvas>
+        </div>
     </div>
 
     <div class="controls">
@@ -112,8 +105,8 @@
         const SHAPES = [null, [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]]];
 
         const localCanvas = document.getElementById('localCanvas'), remoteCanvas = document.getElementById('remoteCanvas'), nextCanvas = document.getElementById('nextCanvas');
-        localCanvas.width = COLS * BLOCK_SIZE; localCanvas.height = ROWS * BLOCK_SIZE;
-        remoteCanvas.width = COLS * BLOCK_SIZE; remoteCanvas.height = ROWS * BLOCK_SIZE;
+        localCanvas.width = remoteCanvas.width = COLS * BLOCK_SIZE;
+        localCanvas.height = remoteCanvas.height = ROWS * BLOCK_SIZE;
         const localCtx = localCanvas.getContext('2d'), remoteCtx = remoteCanvas.getContext('2d'), nextCtx = nextCanvas.getContext('2d');
 
         function spawnPiece() {
@@ -204,6 +197,7 @@
                 }
                 spawnPiece();
             }
+            if(!isSolo && socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece }));
         }
 
         function updateUI() {
@@ -211,12 +205,8 @@
             document.getElementById('level-disp').innerText = level;
         }
 
-        // e.preventDefault()でブラウザの全動作をキャンセル
         function handleInput(type, e) {
-            if(e) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
+            if(e) { e.preventDefault(); e.stopPropagation(); }
             if (!isStarted || isFinished || !piece) return;
             if (type === 'left') { piece.x--; if(collide(board, piece)) piece.x++; }
             if (type === 'right') { piece.x++; if(collide(board, piece)) piece.x--; }
@@ -232,10 +222,24 @@
             if(isFinished) return;
             isFinished = true; isStarted = false; bgm.pause();
             document.getElementById('result-overlay').style.display = "flex";
+            if(!isSolo && !win) socket.send(JSON.stringify({ type: 'lose', roomId }));
         }
 
-        document.getElementById('solo-btn').onclick = () => { isSolo = true; initGame(); };
-        document.getElementById('battle-btn').onclick = () => { roomId = document.getElementById('room-input').value.trim(); isSolo = false; connect(); };
+        document.getElementById('solo-btn').onclick = () => { 
+            isSolo = true; 
+            document.getElementById('timer-box').style.display = "block";
+            document.getElementById('remote-area').style.display = "none";
+            initGame(); 
+        };
+
+        document.getElementById('battle-btn').onclick = () => { 
+            roomId = document.getElementById('room-input').value.trim(); 
+            if(!roomId) return alert("合言葉は？");
+            isSolo = false; 
+            document.getElementById('timer-box').style.display = "none";
+            document.getElementById('remote-area').style.display = "block";
+            connect(); 
+        };
 
         function connect() {
             socket = new WebSocket(SERVER_URL);
@@ -251,18 +255,17 @@
         function draw(ctx, b, p) {
             ctx.fillStyle = '#000'; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
             ctx.strokeStyle = '#222';
-            for(let i=0;i<=COLS;i++){ctx.beginPath();ctx.moveTo(i*BLOCK_SIZE,0);ctx.lineTo(i*BLOCK_SIZE,ROWS*BLOCK_SIZE);ctx.stroke();}
-            for(let i=0;i<=ROWS;i++){ctx.beginPath();ctx.moveTo(0,i*BLOCK_SIZE);ctx.lineTo(COLS*BLOCK_SIZE,i*BLOCK_SIZE);ctx.stroke();}
-            b.forEach((row,y)=>{row.forEach((v,x)=>{if(v){ ctx.fillStyle=COLORS[v]; ctx.fillRect(x*BLOCK_SIZE+1,y*BLOCK_SIZE+1,BLOCK_SIZE-2,BLOCK_SIZE-2); }})});
-            if(p){ctx.fillStyle=COLORS[p.id];p.matrix.forEach((row,y)=>{row.forEach((v,x)=>{if(v)ctx.fillRect((p.x+x)*BLOCK_SIZE+1,(p.y+y)*BLOCK_SIZE+1,BLOCK_SIZE-2,BLOCK_SIZE-2);})});}
+            const bSize = ctx.canvas.width / COLS;
+            for(let i=0;i<=COLS;i++){ctx.beginPath();ctx.moveTo(i*bSize,0);ctx.lineTo(i*bSize,ctx.canvas.height);ctx.stroke();}
+            for(let i=0;i<=ROWS;i++){ctx.beginPath();ctx.moveTo(0,i*bSize);ctx.lineTo(ctx.canvas.width,i*bSize);ctx.stroke();}
+            b.forEach((row,y)=>{row.forEach((v,x)=>{if(v){ ctx.fillStyle=COLORS[v]; ctx.fillRect(x*bSize+1,y*bSize+1,bSize-2,bSize-2); }})});
+            if(p){ctx.fillStyle=COLORS[p.id];p.matrix.forEach((row,y)=>{row.forEach((v,x)=>{if(v)ctx.fillRect((p.x+x)*bSize+1,(p.y+y)*bSize+1,bSize-2,bSize-2);})});}
         }
 
         const bBtn=document.getElementById('boost-btn');
-        // 加速ボタンも完全にイベントをガード
         bBtn.addEventListener('touchstart', (e) => { e.preventDefault(); isBoosting = true; }, {passive: false});
         bBtn.addEventListener('touchend', (e) => { e.preventDefault(); isBoosting = false; }, {passive: false});
         
-        let lastTime=0, dropCounter=0;
         function gameLoop(time=0){
             const dt=time-lastTime; lastTime=time;
             if(isStarted && !isFinished){
@@ -272,6 +275,7 @@
             }
             draw(localCtx, board, piece);
             if(!isSolo) draw(remoteCtx, remoteBoard, remotePiece);
+            
             nextCtx.fillStyle = '#000'; nextCtx.fillRect(0,0,40,40);
             if(nextQueue[0]){
                 const id=nextQueue[0]; nextCtx.fillStyle=COLORS[id];
@@ -279,6 +283,7 @@
             }
             requestAnimationFrame(gameLoop);
         }
+        let lastTime=0, dropCounter=0;
         gameLoop();
     </script>
 </body>
