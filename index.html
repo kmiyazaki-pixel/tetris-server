@@ -3,14 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Tetris Battle - MP3 Fixed</title>
+    <title>Tetris Battle - Ready Go!</title>
     <style>
-        /* スタイルは維持しつつ、さらにコンパクトに調整 */
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
         #start-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #1a1a1a; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
         .start-box { background: #333; padding: 30px 20px; border-radius: 20px; width: 85%; max-width: 280px; }
         input[type="text"] { width: 100%; padding: 12px; font-size: 18px; border-radius: 8px; border: none; margin-bottom: 15px; text-align: center; box-sizing: border-box; background: #222; color: white; }
         #start-button { width: 100%; padding: 12px; font-size: 18px; background: #2196f3; color: white; border: none; border-radius: 8px; cursor: pointer; border-bottom: 4px solid #0d47a1; }
+        
+        /* カウントダウン表示用 */
+        #countdown-overlay {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 60px; font-weight: bold; color: #ffeb3b; text-shadow: 0 0 20px rgba(0,0,0,0.8);
+            z-index: 50; display: none; pointer-events: none;
+        }
+
         #status { background: #4caf50; padding: 5px; font-weight: bold; font-size: 14px; min-height: 20px; }
         .top-controls { display: flex; justify-content: space-around; align-items: center; background: #222; padding: 5px; font-size: 12px; }
         .main-layout { display: flex; justify-content: center; align-items: flex-start; gap: 5px; margin-top: 10px; }
@@ -34,6 +41,8 @@
     <audio id="bgm" loop>
         <source src="Tetris DS OST - Mario Tetris.mp3" type="audio/mpeg">
     </audio>
+
+    <div id="countdown-overlay">Ready...</div>
 
     <div id="start-overlay">
         <div class="start-box">
@@ -86,13 +95,13 @@
         const COLS = 10, ROWS = 20, BLOCK_SIZE = 20;
         const bgm = document.getElementById('bgm');
         const musicToggle = document.getElementById('music-toggle');
+        const countdownEl = document.getElementById('countdown-overlay');
 
-        let socket, roomId, myId, isStarted = false, isFinished = false, isBoosting = false;
+        let socket, roomId, myId, isStarted = false, isFinished = false, isBoosting = false, isCountingDown = false;
 
-        // BGM管理
         function updateMusic() {
-            if (musicToggle.checked && isStarted && !isFinished) {
-                bgm.play().catch(e => console.log("Audio play blocked", e));
+            if (musicToggle.checked && (isStarted || isCountingDown) && !isFinished) {
+                bgm.play().catch(e => console.log(e));
             } else {
                 bgm.pause();
             }
@@ -102,14 +111,27 @@
         document.getElementById('start-button').onclick = function() {
             roomId = document.getElementById('room-input').value.trim();
             if(!roomId) return;
-            
-            // ユーザー操作時に一度play/pauseすることでブラウザの音制限を解除
             bgm.play().then(() => bgm.pause()).catch(e => console.log(e));
-            
             document.getElementById('start-overlay').style.display = 'none';
             document.getElementById('room-display').innerText = "R:" + roomId;
             connect();
         };
+
+        function startCountdown() {
+            isCountingDown = true;
+            updateMusic();
+            countdownEl.innerText = "Ready...";
+            countdownEl.style.display = "block";
+            
+            setTimeout(() => {
+                countdownEl.innerText = "GO!";
+                setTimeout(() => {
+                    countdownEl.style.display = "none";
+                    isCountingDown = false;
+                    isStarted = true; // ここでゲーム開始
+                }, 800);
+            }, 1500);
+        }
 
         // --- 以下、ゲームロジック ---
         const localCanvas = document.getElementById('localCanvas');
@@ -130,12 +152,12 @@
             socket.onmessage = (e) => {
                 const data = JSON.parse(e.data);
                 if (data.type === 'start') {
-                    isStarted = true; isFinished = false; myId = data.userId;
+                    myId = data.userId;
                     document.getElementById('status').innerText = "BATTLE!";
                     board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
                     nextQueue = Array.from({length:6}, () => Math.floor(Math.random()*7)+1);
                     spawnPiece();
-                    updateMusic();
+                    startCountdown(); // サーバーから開始合図が来たらカウントダウン
                 }
                 if (data.type === 'lose' && !isFinished) showResult(true);
                 if (data.type === 'gameData' && data.sender !== myId) { remoteBoard = data.board; remotePiece = data.piece; }
@@ -145,7 +167,22 @@
 
         function spawnPiece() { const id = nextQueue.shift(); nextQueue.push(Math.floor(Math.random()*7)+1); piece = { id, matrix: SHAPES[id], x: 3, y: 0 }; if (collide(board, piece)) showResult(false); }
         function showResult(win) { if (isFinished) return; isFinished = true; isStarted = false; updateMusic(); const s = document.getElementById('status'); s.innerText = win ? "WIN!" : "LOSE"; s.className = win ? "win-screen" : "lose-screen"; if(!win) socket.send(JSON.stringify({ type: 'lose', roomId })); }
-        function drop() { if (!isStarted || isFinished || !piece) return; piece.y++; if (collide(board, piece)) { piece.y--; piece.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v && board[y+piece.y]) board[y+piece.y][x+piece.x] = piece.id; }); }); let cleared = 0; for (let y = ROWS-1; y>=0; y--) { if (board[y].every(cell => cell!==0)) { board.splice(y,1); board.unshift(Array(COLS).fill(0)); cleared++; y++; } } if (cleared >= 2) socket.send(JSON.stringify({ type: 'attack', roomId, lines: cleared-1 })); if (pendingAttack > 0) { for(let i=0; i<pendingAttack; i++){ board.shift(); board.push(Array(COLS).fill(8).map((v, idx) => idx === 4 ? 0 : 8)); } pendingAttack = 0; } spawnPiece(); } sync(); }
+        
+        function drop() { 
+            if (!isStarted || isFinished || !piece) return; // isStartedがtrueになるまで落下しない
+            piece.y++; 
+            if (collide(board, piece)) { 
+                piece.y--; 
+                piece.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v && board[y+piece.y]) board[y+piece.y][x+piece.x] = piece.id; }); }); 
+                let cleared = 0; 
+                for (let y = ROWS-1; y>=0; y--) { if (board[y].every(cell => cell!==0)) { board.splice(y,1); board.unshift(Array(COLS).fill(0)); cleared++; y++; } } 
+                if (cleared >= 2) socket.send(JSON.stringify({ type: 'attack', roomId, lines: cleared-1 })); 
+                if (pendingAttack > 0) { for(let i=0; i<pendingAttack; i++){ board.shift(); board.push(Array(COLS).fill(8).map((v, idx) => idx === 4 ? 0 : 8)); } pendingAttack = 0; } 
+                spawnPiece(); 
+            } 
+            sync(); 
+        }
+
         function collide(b, p) { for(let y=0; y<p.matrix.length; y++) { for(let x=0; x<p.matrix[y].length; x++) { if(p.matrix[y][x] && (!b[y+p.y] || b[y+p.y][x+p.x]!==0)) return true; } } return false; }
         function handleInput(type) { if (!isStarted || isFinished || !piece) return; if (type === 'left') { piece.x--; if(collide(board, piece)) piece.x++; } if (type === 'right') { piece.x++; if(collide(board, piece)) piece.x--; } if (type === 'rotate') { const pre = piece.matrix; piece.matrix = piece.matrix[0].map((_, i) => piece.matrix.map(row => row[i]).reverse()); if(collide(board, piece)) piece.matrix = pre; } if (type === 'drop') { while(!collide(board, piece)) { piece.y++; } piece.y--; drop(); } sync(); }
         function sync() { if (socket?.readyState === WebSocket.OPEN && isStarted) socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece })); }
@@ -153,7 +190,17 @@
         function drawNext() { nextContexts.forEach((ctx, i) => { ctx.fillStyle = '#000'; ctx.fillRect(0,0,30,30); const id = nextQueue[i]; if(!id) return; const m = SHAPES[id]; ctx.fillStyle = COLORS[id]; const s = 6; m.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect(x*s+5, y*s+5, s-1, s-1); }); }); }); }
         
         let lastTime = 0, dropCounter = 0;
-        function gameLoop(time = 0) { const dt = time - lastTime; lastTime = time; if (isStarted && !isFinished) { dropCounter += dt; if (dropCounter > (isBoosting ? 50 : 800)) { drop(); dropCounter = 0; } } drawBoard(localCtx, board, piece); drawBoard(remoteCtx, remoteBoard, remotePiece); drawNext(); requestAnimationFrame(gameLoop); }
+        function gameLoop(time = 0) { 
+            const dt = time - lastTime; lastTime = time; 
+            if (isStarted && !isFinished) { 
+                dropCounter += dt; 
+                if (dropCounter > (isBoosting ? 50 : 800)) { drop(); dropCounter = 0; } 
+            } 
+            drawBoard(localCtx, board, piece); 
+            drawBoard(remoteCtx, remoteBoard, remotePiece); 
+            drawNext(); 
+            requestAnimationFrame(gameLoop); 
+        }
         gameLoop();
 
         const boostBtn = document.getElementById('boost-button');
