@@ -3,45 +3,52 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Tetris Battle - Sound Fix</title>
+    <title>Tetris Battle - YouTube BGM Edition</title>
     <style>
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
-        #status { background: #4caf50; padding: 10px; font-weight: bold; font-size: 18px; min-height: 24px; }
+        #status { background: #4caf50; padding: 10px; font-weight: bold; font-size: 18px; min-height: 24px; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
         .win-screen { background: #ffc107 !important; color: #000 !important; font-size: 24px !important; }
         .lose-screen { background: #f44336 !important; color: #fff !important; font-size: 24px !important; }
         
-        /* 音楽開始用オーバーレイ */
+        /* スタート画面 */
         #start-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.85); display: flex; flex-direction: column;
+            background: rgba(0,0,0,0.9); display: flex; flex-direction: column;
             justify-content: center; align-items: center; z-index: 100;
         }
         #start-button {
-            padding: 20px 40px; font-size: 24px; background: #2196f3; color: white;
+            padding: 25px 50px; font-size: 24px; background: #2196f3; color: white;
             border: none; border-radius: 50px; cursor: pointer; border-bottom: 5px solid #0d47a1;
         }
 
         .main-layout { display: flex; justify-content: center; align-items: flex-start; gap: 10px; margin-top: 10px; }
         .next-container { display: flex; flex-direction: column; gap: 8px; border: 2px solid #555; background: #000; padding: 10px; border-radius: 8px; }
+        .next-label { font-size: 10px; color: #aaa; }
         .next-canvas { background: #000; width: 40px; height: 40px; border-bottom: 1px solid #222; }
+
         .game-area { display: flex; gap: 10px; }
         canvas { background: #000; border: 2px solid #444; width: 140px; height: 280px; }
+
         .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 95%; max-width: 340px; margin: 15px auto; }
         button { background: #333; color: white; border: none; padding: 18px; font-size: 20px; border-radius: 12px; border-bottom: 4px solid #111; touch-action: manipulation; }
         .boost-btn { grid-column: span 3; background: #ff9800 !important; margin-top: -5px; }
+
+        /* YouTubeプレイヤーを隠す */
+        #youtube-player { position: absolute; top: -999px; left: -999px; pointer-events: none; }
     </style>
 </head>
 <body>
     <div id="start-overlay">
-        <h1 style="margin-bottom: 20px;">Tetris Battle</h1>
-        <button id="start-button" onclick="initGame()">対戦を開始する<br><span style="font-size: 14px;">(音楽が流れます)</span></button>
+        <h1 style="margin-bottom: 10px;">Tetris Battle</h1>
+        <p style="color: #aaa; margin-bottom: 30px;">BGM: Tetris Theme (YouTube)</p>
+        <button id="start-button" onclick="initGame()">対戦を開始する</button>
     </div>
 
-    <div id="status">ボタンを押してください</div>
+    <div id="status">対戦待ち</div>
     
     <div class="main-layout">
         <div class="next-container">
-            <div style="font-size: 10px; color: #aaa;">NEXT</div>
+            <div class="next-label">NEXT</div>
             <canvas id="next0" class="next-canvas" width="40" height="40"></canvas>
             <canvas id="next1" class="next-canvas" width="40" height="40"></canvas>
             <canvas id="next2" class="next-canvas" width="40" height="40"></canvas>
@@ -60,21 +67,18 @@
         <button class="boost-btn" ontouchstart="isBoosting=true" ontouchend="isBoosting=false" onmousedown="isBoosting=true" onmouseup="isBoosting=false">加速（長押し）</button>
     </div>
 
-    <audio id="bgm" loop src="https://thelongrunandtheshortrun.com/songs/tetris-theme.mp3"></audio>
-    <audio id="se-clear" src="https://actions.google.com/sounds/v1/science_fiction/low_fuzz.ogg"></audio>
-    <audio id="se-win" src="https://actions.google.com/sounds/v1/cartoon/yay_clapping_cheer.ogg"></audio>
+    <div id="youtube-player"></div>
 
+    <script src="https://www.youtube.com/iframe_api"></script>
     <script>
         const SERVER_URL = 'wss://tetris-server-7w6p.onrender.com';
         const COLS = 10, ROWS = 20, BLOCK_SIZE = 20;
         let socket, roomId, myId, isStarted = false, isFinished = false, isBoosting = false;
-        
+        let player; // YouTube Player instance
+
         const localCtx = document.getElementById('localCanvas').getContext('2d');
         const remoteCtx = document.getElementById('remoteCanvas').getContext('2d');
         const nextContexts = [document.getElementById('next0').getContext('2d'), document.getElementById('next1').getContext('2d'), document.getElementById('next2').getContext('2d')];
-        const bgm = document.getElementById('bgm');
-        const seClear = document.getElementById('se-clear');
-        const seWin = document.getElementById('se-win');
 
         document.querySelectorAll('canvas').forEach(c => { if(c.className !== 'next-canvas'){ c.width = COLS*BLOCK_SIZE; c.height = ROWS*BLOCK_SIZE; } });
 
@@ -83,13 +87,17 @@
         const COLORS = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF', '#777777'];
         const SHAPES = [null, [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]]];
 
-        // ★初期化：ボタンを押したときに呼ばれる
-        function initGame() {
-            // 音声ファイルの読み込みをキックする
-            bgm.play().then(() => {
-                bgm.pause(); // 許可だけ取って一旦止める
-            }).catch(e => console.log("Audio play error:", e));
+        // YouTube API準備
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('youtube-player', {
+                height: '0', width: '0',
+                videoId: '-WRUrN5uH48', // 社長指定の動画ID
+                playerVars: { 'autoplay': 0, 'loop': 1, 'playlist': '-WRUrN5uH48' },
+                events: { 'onReady': () => console.log("YouTube Player Ready") }
+            });
+        }
 
+        function initGame() {
             document.getElementById('start-overlay').style.display = 'none';
             connect();
         }
@@ -98,7 +106,7 @@
             roomId = prompt("ルームID", "0707");
             if(!roomId) { document.getElementById('start-overlay').style.display = 'flex'; return; }
             socket = new WebSocket(SERVER_URL);
-            socket.onopen = () => { document.getElementById('status').innerText = "相手を待っています..."; socket.send(JSON.stringify({ type: 'join', roomId })); };
+            socket.onopen = () => { document.getElementById('status').innerText = "対戦相手を探しています..."; socket.send(JSON.stringify({ type: 'join', roomId })); };
             socket.onmessage = (e) => {
                 const data = JSON.parse(e.data);
                 if (data.type === 'start') {
@@ -108,9 +116,7 @@
                     nextQueue = Array.from({length:4}, () => Math.floor(Math.random()*7)+1);
                     const id = nextQueue.shift(); piece = { id, matrix: SHAPES[id], x: 3, y: 0 };
                     
-                    // ★ここでBGM再生！
-                    bgm.currentTime = 0;
-                    bgm.play();
+                    if(player && player.playVideo) player.playVideo(); // ★YouTube BGM再生
                     
                     requestAnimationFrame(gameLoop);
                 }
@@ -118,6 +124,15 @@
                 if (data.type === 'gameData' && data.sender !== myId) { remoteBoard = data.board; remotePiece = data.piece; }
                 if (data.type === 'attack') pendingAttack += data.lines;
             };
+        }
+
+        function showResult(win) {
+            if (isFinished) return;
+            isFinished = true; isStarted = false;
+            if(player && player.pauseVideo) player.pauseVideo(); // ★BGM停止
+            const s = document.getElementById('status');
+            if (win) { s.innerText = "✨ あなたの勝ちです！ ✨"; s.className = "win-screen"; }
+            else { s.innerText = "あなたは負けました..."; s.className = "lose-screen"; socket.send(JSON.stringify({ type: 'lose', roomId })); }
         }
 
         function drop() {
@@ -128,25 +143,13 @@
                 piece.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v && board[y+piece.y]) board[y+piece.y][x+piece.x] = piece.id; }); });
                 let cleared = 0;
                 for (let y = ROWS-1; y>=0; y--) { if (board[y].every(cell => cell!==0)) { board.splice(y,1); board.unshift(Array(COLS).fill(0)); cleared++; y++; } }
-                if (cleared > 0) {
-                    seClear.currentTime = 0; seClear.play(); // ★消去音
-                    if (cleared >= 2) socket.send(JSON.stringify({ type: 'attack', roomId, lines: cleared-1 }));
-                }
+                if (cleared >= 2) socket.send(JSON.stringify({ type: 'attack', roomId, lines: cleared-1 }));
                 if (pendingAttack > 0) { for(let i=0; i<pendingAttack; i++){ board.shift(); let r=Array(COLS).fill(8); r[Math.floor(Math.random()*COLS)]=0; board.push(r); } pendingAttack=0; }
                 const nextId = nextQueue.shift(); nextQueue.push(Math.floor(Math.random()*7)+1);
                 piece = { id: nextId, matrix: SHAPES[nextId], x: 3, y: 0 };
                 if (collide(board, piece)) showResult(false);
             }
             sync();
-        }
-
-        function showResult(win) {
-            if (isFinished) return;
-            isFinished = true; isStarted = false;
-            bgm.pause();
-            const s = document.getElementById('status');
-            if (win) { s.innerText = "✨ WIN ✨"; s.className = "win-screen"; seWin.play(); }
-            else { s.innerText = "LOSE"; s.className = "lose-screen"; socket.send(JSON.stringify({ type: 'lose', roomId })); }
         }
 
         function collide(b, p) {
@@ -178,8 +181,7 @@
                 ctx.fillStyle = '#000'; ctx.fillRect(0,0,40,40);
                 const id = nextQueue[i]; if(!id) return;
                 const m = SHAPES[id]; ctx.fillStyle = COLORS[id];
-                const s = 8;
-                const offset = (40 - m[0].length * s) / 2;
+                const s = 8; const offset = (40 - m[0].length * s) / 2;
                 m.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect(x*s+offset, y*s+10, s-1, s-1); }); });
             });
         }
