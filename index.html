@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Tetris Battle - Final Stable</title>
+    <title>Tetris Battle Online</title>
     <style>
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
         
-        /* スタート画面：APIの準備を待たずに入力可能に */
+        /* スタート画面 */
         #start-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: #1a1a1a; display: flex; flex-direction: column;
@@ -18,20 +18,18 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 80%; max-width: 300px;
         }
         h1 { margin: 0 0 20px 0; font-size: 28px; }
-        
         input[type="text"] {
             width: 100%; padding: 15px; font-size: 20px; border-radius: 10px;
             border: 2px solid #444; margin-bottom: 20px; text-align: center; box-sizing: border-box;
             background: #222; color: white; outline: none;
         }
-
         #start-button {
             width: 100%; padding: 15px; font-size: 20px; background: #2196f3; color: white;
             border: none; border-radius: 10px; cursor: pointer; border-bottom: 5px solid #0d47a1;
         }
         #start-button:active { border-bottom: 0; transform: translateY(5px); }
 
-        /* ゲーム画面 */
+        /* ゲーム画面レイアウト */
         #status { background: #4caf50; padding: 10px; font-weight: bold; font-size: 18px; min-height: 24px; }
         .win-screen { background: #ffc107 !important; color: #000 !important; }
         .lose-screen { background: #f44336 !important; color: #fff !important; }
@@ -39,6 +37,7 @@
         .top-controls { display: flex; justify-content: space-around; align-items: center; background: #222; padding: 8px; font-size: 14px; border-bottom: 1px solid #444; }
         .music-toggle-container { display: flex; align-items: center; gap: 8px; }
         
+        /* BGMスイッチ */
         .switch { position: relative; display: inline-block; width: 44px; height: 22px; }
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #555; transition: .4s; border-radius: 22px; }
@@ -54,16 +53,17 @@
         .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 95%; max-width: 340px; margin: 15px auto; }
         button.ctrl-btn { background: #333; color: white; border: none; padding: 18px; font-size: 20px; border-radius: 12px; border-bottom: 4px solid #111; touch-action: manipulation; }
         .boost-btn { grid-column: span 3; background: #ff9800 !important; margin-top: -5px; }
+        
         #youtube-player { position: absolute; top: -999px; left: -999px; }
     </style>
 </head>
 <body>
     <div id="start-overlay">
         <div class="start-box">
-            <h1>Tetris Online</h1>
-            <input type="text" id="room-input" placeholder="Room ID" maxlength="10" onkeypress="if(event.key==='Enter') initGame()">
-            <button id="start-button" onclick="initGame()">バトル開始！</button>
-            <div id="loading-msg" style="font-size:10px; color:#666; margin-top:10px;">Music API Initializing...</div>
+            <h1>Tetris Battle</h1>
+            <input type="text" id="room-input" placeholder="Room ID" maxlength="10">
+            <button id="start-button">バトル開始！</button>
+            <div id="loading-msg" style="font-size:10px; color:#666; margin-top:10px;">Music API Ready</div>
         </div>
     </div>
 
@@ -72,13 +72,13 @@
         <div class="music-toggle-container">
             <span>BGM 🎵</span>
             <label class="switch">
-                <input type="checkbox" id="music-toggle" onchange="toggleMusicDirectly()">
+                <input type="checkbox" id="music-toggle">
                 <span class="slider"></span>
             </label>
         </div>
     </div>
 
-    <div id="status">IDを入力して開始</div>
+    <div id="status">IDを入力してください</div>
     
     <div class="main-layout">
         <div class="next-container">
@@ -98,64 +98,80 @@
         <button class="ctrl-btn" style="background:#2196f3" onclick="handleInput('rotate')">回転</button>
         <button class="ctrl-btn" onclick="handleInput('right')">→</button>
         <button class="ctrl-btn" style="grid-column:span 3; background:#f44336" onclick="handleInput('drop')">即落下</button>
-        <button class="ctrl-btn boost-btn" ontouchstart="isBoosting=true" ontouchend="isBoosting=false" onmousedown="isBoosting=true" onmouseup="isBoosting=false">加速（長押し）</button>
+        <button class="ctrl-btn boost-btn" id="boost-button">加速（長押し）</button>
     </div>
 
     <div id="youtube-player"></div>
 
+    <script src="https://www.youtube.com/iframe_api"></script>
     <script>
         const SERVER_URL = 'wss://tetris-server-7w6p.onrender.com';
         const VIDEO_ID = 'Doq1NWO6AtI'; 
         const COLS = 10, ROWS = 20, BLOCK_SIZE = 20;
+        
         let socket, roomId, myId, isStarted = false, isFinished = false, isBoosting = false;
         let player, apiReady = false;
 
-        // YouTube APIの読み込み
-        const tag = document.createElement('script');
-        tag.src = "https://www.youtube.com/iframe_api";
-        const firstScriptTag = document.getElementsByTagName('script')[0];
-        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+        const localCtx = document.getElementById('localCanvas').getContext('2d');
+        const remoteCtx = document.getElementById('remoteCanvas').getContext('2d');
+        const nextContexts = [
+            document.getElementById('next0').getContext('2d'), 
+            document.getElementById('next1').getContext('2d'), 
+            document.getElementById('next2').getContext('2d')
+        ];
 
+        document.querySelectorAll('canvas').forEach(c => {
+            if(!c.classList.contains('next-canvas')){ c.width = COLS*BLOCK_SIZE; c.height = ROWS*BLOCK_SIZE; }
+        });
+
+        const COLORS = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF', '#777777'];
+        const SHAPES = [null, [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]]];
+
+        let board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
+        let piece = null, nextQueue = [], remoteBoard = Array.from({length: ROWS}, () => Array(COLS).fill(0)), remotePiece = null, pendingAttack = 0;
+
+        // YouTube API
         function onYouTubeIframeAPIReady() {
             player = new YT.Player('youtube-player', {
                 height: '0', width: '0', videoId: VIDEO_ID,
                 playerVars: { 'autoplay': 0, 'loop': 1, 'playlist': VIDEO_ID },
-                events: { 'onReady': () => { 
-                    apiReady = true; 
-                    document.getElementById('loading-msg').innerText = "Music API Ready";
-                }}
+                events: { 'onReady': () => { apiReady = true; }}
             });
         }
 
-        function initGame() {
-            const input = document.getElementById('room-input');
-            roomId = input.value.trim();
+        // スタートボタン設定
+        document.getElementById('start-button').onclick = function() {
+            roomId = document.getElementById('room-input').value.trim();
             if(!roomId) return;
-            
-            // 音楽の準備（APIが間に合ってなくてもエラーにならないように保護）
-            if (apiReady && player && player.playVideo) {
-                player.playVideo(); player.pauseVideo();
-            }
-            
+            if (apiReady && player.playVideo) { player.playVideo(); player.pauseVideo(); }
             document.getElementById('start-overlay').style.display = 'none';
             document.getElementById('room-display').innerText = "ROOM: " + roomId;
             connect();
-        }
+        };
 
-        // 以下、ゲームロジック（変更なし、安定動作版）
+        // 加速ボタン設定
+        const boostBtn = document.getElementById('boost-button');
+        const setBoost = (v) => { isBoosting = v; };
+        boostBtn.ontouchstart = () => setBoost(true);
+        boostBtn.ontouchend = () => setBoost(false);
+        boostBtn.onmousedown = () => setBoost(true);
+        boostBtn.onmouseup = () => setBoost(false);
+
         function connect() {
             socket = new WebSocket(SERVER_URL);
-            socket.onopen = () => { socket.send(JSON.stringify({ type: 'join', roomId })); };
+            socket.onopen = () => { 
+                document.getElementById('status').innerText = "相手を待っています...";
+                socket.send(JSON.stringify({ type: 'join', roomId })); 
+            };
             socket.onmessage = (e) => {
                 const data = JSON.parse(e.data);
                 if (data.type === 'start') {
                     isStarted = true; isFinished = false; myId = data.userId;
                     document.getElementById('status').innerText = "対戦中！";
                     board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
-                    nextQueue = Array.from({length:4}, () => Math.floor(Math.random()*7)+1);
-                    const id = nextQueue.shift(); piece = { id, matrix: SHAPES[id], x: 3, y: 0 };
+                    nextQueue = Array.from({length:6}, () => Math.floor(Math.random()*7)+1);
+                    spawnPiece();
                     if(document.getElementById('music-toggle').checked && apiReady) player.playVideo();
-                    requestAnimationFrame(gameLoop);
                 }
                 if (data.type === 'lose' && !isFinished) showResult(true);
                 if (data.type === 'gameData' && data.sender !== myId) { remoteBoard = data.board; remotePiece = data.piece; }
@@ -163,10 +179,11 @@
             };
         }
 
-        function toggleMusicDirectly() {
-            if (!apiReady) return;
-            if (document.getElementById('music-toggle').checked && isStarted) player.playVideo();
-            else player.pauseVideo();
+        function spawnPiece() {
+            const id = nextQueue.shift();
+            nextQueue.push(Math.floor(Math.random()*7)+1);
+            piece = { id, matrix: SHAPES[id], x: 3, y: 0 };
+            if (collide(board, piece)) showResult(false);
         }
 
         function showResult(win) {
@@ -188,10 +205,16 @@
                 let cleared = 0;
                 for (let y = ROWS-1; y>=0; y--) { if (board[y].every(cell => cell!==0)) { board.splice(y,1); board.unshift(Array(COLS).fill(0)); cleared++; y++; } }
                 if (cleared >= 2) socket.send(JSON.stringify({ type: 'attack', roomId, lines: cleared-1 }));
-                if (pendingAttack > 0) { for(let i=0; i<pendingAttack; i++){ board.shift(); let r=Array(COLS).fill(8); r[Math.floor(Math.random()*COLS)]=0; board.push(r); } pendingAttack=0; }
-                const nextId = nextQueue.shift(); nextQueue.push(Math.floor(Math.random()*7)+1);
-                piece = { id: nextId, matrix: SHAPES[nextId], x: 3, y: 0 };
-                if (collide(board, piece)) showResult(false);
+                if (pendingAttack > 0) {
+                    for(let i=0; i<pendingAttack; i++){
+                        board.shift();
+                        let r = Array(COLS).fill(8);
+                        r[Math.floor(Math.random()*COLS)] = 0;
+                        board.push(r);
+                    }
+                    pendingAttack = 0;
+                }
+                spawnPiece();
             }
             sync();
         }
@@ -206,27 +229,26 @@
         }
 
         function handleInput(type) {
-            if (!isStarted || isFinished) return;
+            if (!isStarted || isFinished || !piece) return;
             if (type === 'left') { piece.x--; if(collide(board, piece)) piece.x++; }
             if (type === 'right') { piece.x++; if(collide(board, piece)) piece.x--; }
-            if (type === 'rotate') { const pre = piece.matrix; piece.matrix = matrixRotate(piece.matrix); if(collide(board, piece)) piece.matrix = pre; }
+            if (type === 'rotate') { 
+                const pre = piece.matrix; 
+                piece.matrix = piece.matrix[0].map((_, i) => piece.matrix.map(row => row[i]).reverse());
+                if(collide(board, piece)) piece.matrix = pre;
+            }
             if (type === 'drop') { while(!collide(board, piece)) { piece.y++; } piece.y--; drop(); }
             sync();
         }
-        function matrixRotate(m) { return m[0].map((_, i) => m.map(row => row[i]).reverse()); }
-        function sync() { if (socket && socket.readyState === WebSocket.OPEN && isStarted) socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece })); }
-        
-        const localCtx = document.getElementById('localCanvas').getContext('2d');
-        const remoteCtx = document.getElementById('remoteCanvas').getContext('2d');
-        const nextContexts = [document.getElementById('next0').getContext('2d'), document.getElementById('next1').getContext('2d'), document.getElementById('next2').getContext('2d')];
-        const COLORS = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF', '#777777'];
-        const SHAPES = [null, [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]]];
+
+        function sync() { if (socket?.readyState === WebSocket.OPEN && isStarted) socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece })); }
 
         function drawBoard(ctx, b, p) {
             ctx.fillStyle = '#000'; ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);
             b.forEach((row, y) => { row.forEach((v, x) => { if(v){ ctx.fillStyle = COLORS[v]; ctx.fillRect(x*BLOCK_SIZE+1, y*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); } }); });
             if(p){ ctx.fillStyle = COLORS[p.id]; p.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect((p.x+x)*BLOCK_SIZE+1, (p.y+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); }); }); }
         }
+
         function drawNext() {
             nextContexts.forEach((ctx, i) => {
                 ctx.fillStyle = '#000'; ctx.fillRect(0,0,40,40);
@@ -236,6 +258,7 @@
                 m.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect(x*s+offset, y*s+10, s-1, s-1); }); });
             });
         }
+
         let lastTime = 0, dropCounter = 0;
         function gameLoop(time = 0) {
             const dt = time - lastTime; lastTime = time;
@@ -243,8 +266,19 @@
                 dropCounter += dt;
                 if (dropCounter > (isBoosting ? 50 : 1000)) { drop(); dropCounter = 0; }
             }
-            drawBoard(localCtx, board, piece); drawBoard(remoteCtx, remoteBoard, remotePiece); drawNext();
+            drawBoard(localCtx, board, piece);
+            drawBoard(remoteCtx, remoteBoard, remotePiece);
+            drawNext();
             requestAnimationFrame(gameLoop);
+        }
+        
+        // ★重要：描画ループは最初から回しておく
+        gameLoop();
+        
+        function toggleMusicDirectly() {
+            if (!apiReady) return;
+            if (document.getElementById('music-toggle').checked && isStarted) player.playVideo();
+            else player.pauseVideo();
         }
     </script>
 </body>
