@@ -3,20 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Tetris Battle - Step 1: Next</title>
+    <title>Tetris Battle - Step 2: Next 3</title>
     <style>
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
         #status { background: #4caf50; padding: 10px; font-weight: bold; font-size: 18px; min-height: 24px; }
-        .win-screen { background: #ffc107 !important; color: #000 !important; }
-        .lose-screen { background: #f44336 !important; color: #fff !important; }
+        .win-screen { background: #ffc107 !important; color: #000 !important; font-size: 24px !important; }
+        .lose-screen { background: #f44336 !important; color: #fff !important; font-size: 24px !important; }
         
-        /* レイアウト調整 */
         .main-layout { display: flex; justify-content: center; align-items: flex-start; gap: 10px; margin-top: 10px; }
         
-        /* NEXT表示窓 */
-        .next-box { border: 2px solid #555; background: #000; padding: 5px; width: 50px; }
-        .next-label { font-size: 10px; color: #aaa; margin-bottom: 5px; }
-        #nextCanvas { background: #000; width: 40px; height: 40px; }
+        /* NEXT 3個表示エリア */
+        .next-container { display: flex; flex-direction: column; gap: 8px; border: 2px solid #555; background: #000; padding: 10px; border-radius: 8px; }
+        .next-label { font-size: 10px; color: #aaa; }
+        .next-canvas { background: #000; width: 40px; height: 40px; border-bottom: 1px solid #222; }
 
         .game-area { display: flex; gap: 10px; }
         canvas { background: #000; border: 2px solid #444; width: 140px; height: 280px; }
@@ -28,9 +27,11 @@
     <div id="status">ルームIDを入力して接続...</div>
     
     <div class="main-layout">
-        <div class="next-box">
+        <div class="next-container">
             <div class="next-label">NEXT</div>
-            <canvas id="nextCanvas" width="40" height="40"></canvas>
+            <canvas id="next0" class="next-canvas" width="40" height="40"></canvas>
+            <canvas id="next1" class="next-canvas" width="40" height="40"></canvas>
+            <canvas id="next2" class="next-canvas" width="40" height="40"></canvas>
         </div>
 
         <div class="game-area">
@@ -53,17 +54,15 @@
         
         const localCtx = document.getElementById('localCanvas').getContext('2d');
         const remoteCtx = document.getElementById('remoteCanvas').getContext('2d');
-        const nextCtx = document.getElementById('nextCanvas').getContext('2d');
-        
-        // メインキャンバスの解像度設定
-        document.getElementById('localCanvas').width = COLS * BLOCK_SIZE;
-        document.getElementById('localCanvas').height = ROWS * BLOCK_SIZE;
-        document.getElementById('remoteCanvas').width = COLS * BLOCK_SIZE;
-        document.getElementById('remoteCanvas').height = ROWS * BLOCK_SIZE;
+        const nextContexts = [
+            document.getElementById('next0').getContext('2d'),
+            document.getElementById('next1').getContext('2d'),
+            document.getElementById('next2').getContext('2d')
+        ];
 
         let board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
         let piece = null;
-        let nextPieceId = null; // ★次に来るブロックのIDを保持
+        let nextQueue = []; // ★ブロックの順番待ちリスト
         let remoteBoard = Array.from({length: ROWS}, () => Array(COLS).fill(0));
         let remotePiece = null;
         let pendingAttack = 0;
@@ -83,42 +82,41 @@
                 const data = JSON.parse(e.data);
                 if (data.type === 'start') {
                     isStarted = true; isFinished = false; myId = data.userId;
-                    document.getElementById('status').innerText = "対戦中！";
-                    document.getElementById('status').className = "";
+                    document.getElementById('status').innerText = "対戦中！"; document.getElementById('status').className = "";
                     board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
                     
-                    // ★初期ブロックと次のブロックを生成
-                    piece = createNewPiece();
-                    nextPieceId = Math.floor(Math.random() * 7) + 1;
+                    // ★最初に4個分生成しておく（1個目を使う用、残り3個をNEXT表示用）
+                    nextQueue = [];
+                    for(let i=0; i<4; i++) nextQueue.push(Math.floor(Math.random() * 7) + 1);
+                    
+                    piece = { id: nextQueue.shift(), matrix: SHAPES[nextQueue[0]], x: 3, y: 0 }; // 修正：初期化
+                    piece.matrix = SHAPES[piece.id]; // 確実に代入
                     
                     requestAnimationFrame(gameLoop);
                 }
                 if (data.type === 'lose' && !isFinished) showResult(true);
-                if (data.type === 'gameData' && data.sender !== myId) {
+                if (data.type === 'gameData' && data.sender !== myId && !isFinished) {
                     remoteBoard = data.board; remotePiece = data.piece;
                 }
-                if (data.type === 'attack') {
+                if (data.type === 'attack' && !isFinished) {
                     pendingAttack += data.lines;
                 }
             };
         }
 
-        function createNewPiece() {
-            const id = Math.floor(Math.random() * 7) + 1;
-            return { id, matrix: SHAPES[id], x: 3, y: 0 };
-        }
-
         function drawNext() {
-            nextCtx.fillStyle = '#000';
-            nextCtx.fillRect(0, 0, 40, 40);
-            if (!nextPieceId) return;
-            
-            const matrix = SHAPES[nextPieceId];
-            nextCtx.fillStyle = COLORS[nextPieceId];
-            const s = 10; // NEXT窓内でのブロックサイズ
-            matrix.forEach((row, y) => {
-                row.forEach((v, x) => {
-                    if(v) nextCtx.fillRect(x*s + 5, y*s + 5, s-1, s-1);
+            nextContexts.forEach((ctx, i) => {
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, 40, 40);
+                const id = nextQueue[i];
+                if (!id) return;
+                const matrix = SHAPES[id];
+                ctx.fillStyle = COLORS[id];
+                const s = 10;
+                matrix.forEach((row, y) => {
+                    row.forEach((v, x) => {
+                        if(v) ctx.fillRect(x*s + 5, y*s + 5, s-1, s-1);
+                    });
                 });
             });
         }
@@ -130,7 +128,6 @@
                 piece.y--;
                 piece.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v) board[y+piece.y][x+piece.x] = piece.id; }); });
                 
-                // 消去と攻撃の処理
                 let cleared = 0;
                 for (let y = ROWS - 1; y >= 0; y--) {
                     if (board[y].every(cell => cell !== 0)) {
@@ -149,9 +146,10 @@
                     pendingAttack = 0;
                 }
 
-                // ★NEXTを現在のピースにし、新しいNEXTを生成
-                piece = { id: nextPieceId, matrix: SHAPES[nextPieceId], x: 3, y: 0 };
-                nextPieceId = Math.floor(Math.random() * 7) + 1;
+                // ★キューから取り出し、新しく末尾に追加
+                const nextId = nextQueue.shift();
+                nextQueue.push(Math.floor(Math.random() * 7) + 1);
+                piece = { id: nextId, matrix: SHAPES[nextId], x: 3, y: 0 };
                 
                 if (collide(board, piece)) showResult(false);
             }
@@ -159,6 +157,13 @@
         }
 
         // --- 以下共通ロジック ---
+        function showResult(win) {
+            if (isFinished) return;
+            isFinished = true; isStarted = false;
+            const s = document.getElementById('status');
+            if (win) { s.innerText = "✨ あなたの勝ちです！ ✨"; s.className = "win-screen"; }
+            else { s.innerText = "あなたは負けました..."; s.className = "lose-screen"; socket.send(JSON.stringify({ type: 'lose', roomId })); }
+        }
         function collide(b, p) {
             for (let y = 0; y < p.matrix.length; y++) {
                 for (let x = 0; x < p.matrix[y].length; x++) {
@@ -171,21 +176,12 @@
             if (!isStarted || isFinished) return;
             if (type === 'left') { piece.x--; if(collide(board, piece)) piece.x++; }
             if (type === 'right') { piece.x++; if(collide(board, piece)) piece.x--; }
-            if (type === 'rotate') { 
-                const pre = piece.matrix; piece.matrix = matrixRotate(piece.matrix); 
-                if(collide(board, piece)) piece.matrix = pre; 
-            }
+            if (type === 'rotate') { const pre = piece.matrix; piece.matrix = matrixRotate(piece.matrix); if(collide(board, piece)) piece.matrix = pre; }
             if (type === 'drop') { while(!collide(board, piece)) { piece.y++; } piece.y--; drop(); }
             sync();
         }
         function matrixRotate(matrix) { return matrix[0].map((_, i) => matrix.map(row => row[i]).reverse()); }
-        function sync() { if (socket.readyState === WebSocket.OPEN && isStarted) socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece })); }
-        function showResult(win) {
-            isFinished = true; isStarted = false;
-            const s = document.getElementById('status');
-            if (win) { s.innerText = "✨ あなたの勝ちです！ ✨"; s.className = "win-screen"; }
-            else { s.innerText = "あなたは負けました..."; s.className = "lose-screen"; socket.send(JSON.stringify({ type: 'lose', roomId })); }
-        }
+        function sync() { if (socket.readyState === WebSocket.OPEN && isStarted && !isFinished) socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece })); }
         function drawBoard(ctx, b, p) {
             ctx.fillStyle = '#000'; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
             ctx.strokeStyle = '#222';
@@ -204,7 +200,7 @@
             }
             drawBoard(localCtx, board, piece);
             drawBoard(remoteCtx, remoteBoard, remotePiece);
-            drawNext(); // ★NEXTの描画
+            drawNext();
             requestAnimationFrame(gameLoop);
         }
         connect();
