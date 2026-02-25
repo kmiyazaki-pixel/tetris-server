@@ -1,4 +1,85 @@
-<script>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Tetris Inferno - Fixed</title>
+    <style>
+        body { background: #000; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; touch-action: manipulation; }
+        .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 2000; }
+        .box { background: #222; padding: 20px; border-radius: 20px; width: 85%; max-width: 300px; border: 2px solid #f44336; }
+        .btn { width: 100%; padding: 15px; font-size: 18px; color: white; border: none; border-radius: 12px; cursor: pointer; margin-bottom: 12px; font-weight: bold; }
+        .btn-red { background: #f44336; }
+        .btn-blue { background: #2196f3; }
+        .btn-gray { background: #555; }
+        input[type="text"] { width: 100%; padding: 10px; margin-bottom: 10px; background: #000; color: #fff; border: 1px solid #444; box-sizing: border-box; }
+        
+        .info-panel { display: flex; justify-content: space-around; background: #111; padding: 10px; font-size: 12px; }
+        .stat-val { color: #ffeb3b; display: block; font-size: 16px; }
+        
+        canvas { background: #000; border: 2px solid #333; }
+        .game-canvas { width: 150px; height: 300px; }
+        .main-layout { display: flex; justify-content: center; align-items: center; margin-top: 10px; visibility: hidden; }
+        
+        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 90%; max-width: 360px; margin: 10px auto; }
+        .ctrl-btn { background: #333; color: white; border: none; padding: 18px; font-size: 20px; border-radius: 12px; border-bottom: 4px solid #000; }
+        #countdown { position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%); font-size: 70px; font-weight: bold; color: #f44336; z-index: 3000; display: none; pointer-events: none; }
+        
+        @keyframes shake { 0% { transform: translate(2px, 2px); } 50% { transform: translate(-2px, -2px); } 100% { transform: translate(0,0); } }
+        .shake { animation: shake 0.1s 2; }
+    </style>
+</head>
+<body>
+    <audio id="bgm" loop><source src="Tetris DS OST - Mario Tetris.mp3" type="audio/mpeg"></audio>
+
+    <div id="start-overlay" class="overlay">
+        <div class="box">
+            <h1 style="color:#f44336; margin:0;">INFERNO</h1>
+            <p style="font-size:12px;">Level up & Rising Ground</p>
+            <button class="btn btn-red" id="solo-btn">SOLO HELL</button>
+            <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
+            <input type="text" id="room-input" placeholder="Room ID">
+            <button class="btn btn-blue" id="battle-btn">BATTLE (Online)</button>
+        </div>
+    </div>
+
+    <div id="result-overlay" class="overlay" style="display:none;">
+        <div class="box">
+            <h2 id="result-text">GAME OVER</h2>
+            <p>SCORE: <span id="final-score" style="color:#ffeb3b">0</span></p>
+            <button class="btn btn-blue" onclick="location.reload()">TITLE</button>
+        </div>
+    </div>
+
+    <div id="countdown"></div>
+
+    <div class="info-panel">
+        <div>SCORE<span id="score-disp" class="stat-val">0</span></div>
+        <div>LEVEL<span id="level-disp" class="stat-val">1</span></div>
+        <div id="timer-box">NEXT RISE<span id="timer-disp" class="stat-val">12s</span></div>
+    </div>
+
+    <div class="main-layout" id="game-layout">
+        <div style="margin-right:10px;">
+            <div style="font-size:10px;">NEXT</div>
+            <canvas id="nextCanvas" width="40" height="40"></canvas>
+        </div>
+        <div id="remote-area" style="display:none; margin-right:10px;">
+            <div style="font-size:10px;">RIVAL</div>
+            <canvas id="remoteCanvas" style="width:60px; height:120px; opacity:0.5;"></canvas>
+        </div>
+        <canvas id="localCanvas" class="game-canvas"></canvas>
+    </div>
+
+    <div class="controls">
+        <button class="ctrl-btn" onclick="handleInput('left')">←</button>
+        <button class="ctrl-btn" style="background:#2196f3" onclick="handleInput('rotate')">回</button>
+        <button class="ctrl-btn" onclick="handleInput('right')">→</button>
+        <button class="ctrl-btn" style="grid-column:span 3; background:#f44336;" onclick="handleInput('drop')">DROP</button>
+        <button class="ctrl-btn" id="boost-btn" style="grid-column:span 3; background:#ff9800; font-size:14px;">HOLD FOR BOOST</button>
+    </div>
+
+    <script>
         const SERVER_URL = 'wss://tetris-server-7w6p.onrender.com';
         const COLS = 10, ROWS = 20, BLOCK_SIZE = 20;
         const bgm = document.getElementById('bgm');
@@ -10,10 +91,10 @@
         const COLORS = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF', '#777777'];
         const SHAPES = [null, [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]]];
 
-        const localCanvas = document.getElementById('localCanvas');
-        const nextCanvas = document.getElementById('nextCanvas');
+        const localCanvas = document.getElementById('localCanvas'), remoteCanvas = document.getElementById('remoteCanvas'), nextCanvas = document.getElementById('nextCanvas');
         localCanvas.width = COLS * BLOCK_SIZE; localCanvas.height = ROWS * BLOCK_SIZE;
-        const localCtx = localCanvas.getContext('2d'), nextCtx = nextCanvas.getContext('2d');
+        remoteCanvas.width = COLS * BLOCK_SIZE; remoteCanvas.height = ROWS * BLOCK_SIZE;
+        const localCtx = localCanvas.getContext('2d'), remoteCtx = remoteCanvas.getContext('2d'), nextCtx = nextCanvas.getContext('2d');
 
         function spawnPiece() {
             if (nextQueue.length < 5) for(let i=0; i<7; i++) nextQueue.push(Math.floor(Math.random()*7)+1);
@@ -27,31 +108,26 @@
             document.getElementById('result-overlay').style.display = 'none';
             document.getElementById('game-layout').style.visibility = 'visible';
             
-            isStarted = false; 
-            isFinished = false;
-            score = 0; level = 1; linesCleared = 0; riseTimer = 12;
-            updateUI();
-            
             board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
+            remoteBoard = Array.from({length: ROWS}, () => Array(COLS).fill(0));
             nextQueue = [];
-            for(let i=0; i<7; i++) nextQueue.push(Math.floor(Math.random()*7)+1);
+            score = 0; level = 1; linesCleared = 0; riseTimer = 12;
+            isStarted = false; isFinished = false;
+            
             spawnPiece();
+            updateUI();
 
             const cd = document.getElementById('countdown');
-            cd.innerText = "3";
-            cd.style.display = "block";
-            
+            cd.innerText = "3"; cd.style.display = "block";
             let count = 3;
-            // カウントダウンを確実に制御
             const timer = setInterval(() => {
                 count--;
-                if(count > 0) {
-                    cd.innerText = count;
-                } else if(count === 0) {
+                if(count > 0) cd.innerText = count;
+                else if(count === 0) {
                     cd.innerText = "HELL!";
-                    if(document.getElementById('music-toggle').checked) bgm.play().catch(()=>{});
-                    isStarted = true; // ここでゲーム開始
-                    if(isSolo) startInfernoTimer();
+                    isStarted = true;
+                    if(document.getElementById('music-toggle')?.checked !== false) bgm.play().catch(()=>{});
+                    if(isSolo) startRiseTimer();
                 } else {
                     cd.style.display = "none";
                     clearInterval(timer);
@@ -59,18 +135,17 @@
             }, 800);
         }
 
-        function startInfernoTimer() {
-            if(!isStarted || isFinished) return;
-            // 1秒ごとにカウントダウンする独立したループ
+        function startRiseTimer() {
+            if(!isStarted || isFinished || !isSolo) return;
             setTimeout(() => {
                 if(!isStarted || isFinished) return;
                 riseTimer--;
                 if(riseTimer <= 0) {
                     riseBoard();
-                    riseTimer = Math.max(4, 12 - level); 
+                    riseTimer = Math.max(4, 12 - level);
                 }
                 document.getElementById('timer-disp').innerText = riseTimer + "s";
-                startInfernoTimer();
+                startRiseTimer();
             }, 1000);
         }
 
@@ -81,9 +156,8 @@
             newRow[hole] = 0;
             board.push(newRow);
             if(piece && collide(board, piece)) piece.y--;
-            // 視覚的警告
-            localCanvas.style.borderColor = "#f44336";
-            setTimeout(() => localCanvas.style.borderColor = "#444", 200);
+            localCanvas.classList.add('shake');
+            setTimeout(() => localCanvas.classList.remove('shake'), 100);
         }
 
         function collide(b, p) {
@@ -103,33 +177,22 @@
             if (collide(board, piece)) {
                 piece.y--;
                 piece.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v && board[y+piece.y]) board[y+piece.y][x+piece.x] = piece.id; }); });
-                clearLines();
+                let cleared = 0;
+                for (let y = ROWS-1; y>=0; y--) {
+                    if (board[y].every(cell => cell!==0)) {
+                        board.splice(y,1); board.unshift(Array(COLS).fill(0));
+                        cleared++; y++;
+                    }
+                }
+                if(cleared > 0) {
+                    linesCleared += cleared;
+                    score += [0, 100, 300, 500, 800][cleared] * level;
+                    if(linesCleared >= level * 5) level++;
+                    updateUI();
+                }
                 spawnPiece();
             }
-        }
-
-        function clearLines() {
-            let cleared = 0;
-            for (let y = ROWS-1; y>=0; y--) {
-                if (board[y].every(cell => cell!==0)) {
-                    board.splice(y,1);
-                    board.unshift(Array(COLS).fill(0));
-                    cleared++;
-                    y++;
-                }
-            }
-            if(cleared > 0) {
-                linesCleared += cleared;
-                score += [0, 100, 300, 500, 800][cleared] * level;
-                if(cleared === 4) {
-                    localCanvas.classList.add('shake');
-                    setTimeout(() => localCanvas.classList.remove('shake'), 200);
-                }
-                if(linesCleared >= level * 5) {
-                    level++;
-                }
-                updateUI();
-            }
+            if(!isSolo && socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece }));
         }
 
         function updateUI() {
@@ -149,38 +212,53 @@
             if (type === 'drop') { while(!collide(board, piece)) { piece.y++; } piece.y--; drop(); }
         }
 
-        document.getElementById('solo-btn').onclick = () => { isSolo = true; initGame(); };
-        document.getElementById('rematch-btn').onclick = () => initGame();
-
         function showResult(win) {
             if(isFinished) return;
             isFinished = true; isStarted = false; bgm.pause();
             document.getElementById('final-score').innerText = score;
-            document.getElementById('final-level').innerText = level;
             document.getElementById('result-overlay').style.display = "flex";
+            if(!isSolo && !win) socket.send(JSON.stringify({ type: 'lose', roomId }));
         }
 
-        function drawBoard(ctx, b, p) {
+        document.getElementById('solo-btn').onclick = () => {
+            isSolo = true;
+            document.getElementById('timer-box').style.display = "block";
+            initGame();
+        };
+
+        document.getElementById('battle-btn').onclick = () => {
+            roomId = document.getElementById('room-input').value.trim();
+            if(!roomId) return alert("Room ID?");
+            isSolo = false;
+            document.getElementById('timer-box').style.display = "none";
+            document.getElementById('remote-area').style.display = "block";
+            connect();
+        };
+
+        function connect() {
+            socket = new WebSocket(SERVER_URL);
+            socket.onopen = () => {
+                socket.send(JSON.stringify({ type: 'join', roomId }));
+                document.getElementById('score-disp').innerText = "WAITING...";
+            };
+            socket.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                if (data.type === 'start') { myId = data.userId; initGame(); }
+                if (data.type === 'gameData' && data.sender !== myId) { remoteBoard = data.board; remotePiece = data.piece; }
+                if (data.type === 'lose' && !isFinished) showResult(true);
+            };
+        }
+
+        function draw(ctx, b, p) {
             ctx.fillStyle = '#000'; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
             ctx.strokeStyle = '#222';
             for(let i=0;i<=COLS;i++){ctx.beginPath();ctx.moveTo(i*BLOCK_SIZE,0);ctx.lineTo(i*BLOCK_SIZE,ROWS*BLOCK_SIZE);ctx.stroke();}
             for(let i=0;i<=ROWS;i++){ctx.beginPath();ctx.moveTo(0,i*BLOCK_SIZE);ctx.lineTo(COLS*BLOCK_SIZE,i*BLOCK_SIZE);ctx.stroke();}
-            if(b)b.forEach((row,y)=>{row.forEach((v,x)=>{if(v){
+            b.forEach((row,y)=>{row.forEach((v,x)=>{if(v){
                 ctx.fillStyle=COLORS[v];
                 ctx.fillRect(x*BLOCK_SIZE+1,y*BLOCK_SIZE+1,BLOCK_SIZE-2,BLOCK_SIZE-2);
-                if(v===8) {
-                    ctx.fillStyle="rgba(255,255,255,0.1)";
-                    ctx.fillRect(x*BLOCK_SIZE+4, y*BLOCK_SIZE+4, BLOCK_SIZE-8, BLOCK_SIZE-8);
-                }
             }})});
             if(p){ctx.fillStyle=COLORS[p.id];p.matrix.forEach((row,y)=>{row.forEach((v,x)=>{if(v)ctx.fillRect((p.x+x)*BLOCK_SIZE+1,(p.y+y)*BLOCK_SIZE+1,BLOCK_SIZE-2,BLOCK_SIZE-2);})});}
-        }
-
-        function drawNext() {
-            nextCtx.fillStyle = '#000'; nextCtx.fillRect(0,0,40,40);
-            if(!nextQueue[0]) return;
-            const id = nextQueue[0]; const m = SHAPES[id]; const s = 8; nextCtx.fillStyle = COLORS[id];
-            m.forEach((row,y)=>{row.forEach((v,x)=>{if(v)nextCtx.fillRect(x*s+10,y*s+10,s-1,s-1);})});
         }
 
         const bBtn=document.getElementById('boost-btn');
@@ -192,12 +270,20 @@
             const dt=time-lastTime; lastTime=time;
             if(isStarted && !isFinished){
                 dropCounter += dt;
-                const currentInterval = Math.max(30, 800 * Math.pow(0.8, level-1));
-                if(dropCounter > (isBoosting ? 20 : currentInterval)){ drop(); dropCounter = 0; }
+                const interval = Math.max(40, 800 * Math.pow(0.8, level-1));
+                if(dropCounter > (isBoosting ? 25 : interval)){ drop(); dropCounter = 0; }
             }
-            drawBoard(localCtx, board, piece);
-            drawNext();
+            draw(localCtx, board, piece);
+            if(!isSolo) draw(remoteCtx, remoteBoard, remotePiece);
+            
+            nextCtx.fillStyle = '#000'; nextCtx.fillRect(0,0,40,40);
+            if(nextQueue[0]){
+                const id=nextQueue[0]; nextCtx.fillStyle=COLORS[id];
+                SHAPES[id].forEach((row,y)=>{row.forEach((v,x)=>{if(v)nextCtx.fillRect(x*8+10,y*8+10,7,7);})});
+            }
             requestAnimationFrame(gameLoop);
         }
         gameLoop();
     </script>
+</body>
+</html>
