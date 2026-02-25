@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Tetris Battle Online</title>
+    <title>Tetris Battle - Mobile Compact</title>
     <style>
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
         
@@ -13,72 +13,61 @@
             background: #1a1a1a; display: flex; flex-direction: column;
             justify-content: center; align-items: center; z-index: 100;
         }
-        .start-box { 
-            background: #333; padding: 40px 30px; border-radius: 24px; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 80%; max-width: 300px;
-        }
-        input[type="text"] {
-            width: 100%; padding: 15px; font-size: 20px; border-radius: 10px;
-            border: 2px solid #444; margin-bottom: 20px; text-align: center; box-sizing: border-box;
-            background: #222; color: white; outline: none;
-        }
-        #start-button {
-            width: 100%; padding: 15px; font-size: 20px; background: #2196f3; color: white;
-            border: none; border-radius: 10px; cursor: pointer; border-bottom: 5px solid #0d47a1;
-        }
+        .start-box { background: #333; padding: 30px 20px; border-radius: 20px; width: 85%; max-width: 280px; }
+        input[type="text"] { width: 100%; padding: 12px; font-size: 18px; border-radius: 8px; border: none; margin-bottom: 15px; text-align: center; box-sizing: border-box; background: #222; color: white; }
+        #start-button { width: 100%; padding: 12px; font-size: 18px; background: #2196f3; color: white; border: none; border-radius: 8px; cursor: pointer; border-bottom: 4px solid #0d47a1; }
 
-        /* ゲーム画面レイアウト：横並びに修正 */
-        #status { background: #4caf50; padding: 10px; font-weight: bold; font-size: 18px; min-height: 24px; }
+        /* ゲーム画面レイアウト：全体を縮小 */
+        #status { background: #4caf50; padding: 5px; font-weight: bold; font-size: 14px; min-height: 20px; }
         .win-screen { background: #ffc107 !important; color: #000 !important; }
         .lose-screen { background: #f44336 !important; color: #fff !important; }
         
-        .top-controls { display: flex; justify-content: space-around; align-items: center; background: #222; padding: 8px; font-size: 14px; border-bottom: 1px solid #444; }
+        .top-controls { display: flex; justify-content: space-around; align-items: center; background: #222; padding: 5px; font-size: 12px; }
         
         .main-layout { 
             display: flex; 
             justify-content: center; 
             align-items: flex-start; 
-            gap: 20px; /* プレイヤー間の隙間 */
-            margin-top: 15px;
-            padding: 0 10px;
+            gap: 5px; /* 隙間を最小限に */
+            margin-top: 10px;
         }
 
         .player-block { display: flex; flex-direction: column; align-items: center; }
-        .player-label { font-size: 14px; font-weight: bold; margin-bottom: 5px; color: #aaa; }
+        .player-label { font-size: 10px; margin-bottom: 2px; color: #aaa; }
 
         .next-container { 
-            display: flex; flex-direction: column; gap: 8px; 
-            border: 2px solid #555; background: #000; padding: 10px; border-radius: 8px;
-            margin-right: 10px;
+            display: flex; flex-direction: column; gap: 5px; 
+            border: 1px solid #555; background: #000; padding: 5px; border-radius: 5px;
         }
-        .next-canvas { background: #000; width: 50px; height: 50px; }
+        .next-canvas { background: #000; width: 30px; height: 30px; } /* NEXTを小さく */
         
-        /* キャンバスのサイズ固定（ブロックが歪まないように） */
+        /* キャンバスサイズをスマホ向けに縮小 */
         canvas.game-canvas { 
             background: #000; 
-            border: 3px solid #444; 
-            width: 200px; /* 表示上の幅 */
-            height: 400px; /* 表示上の高さ */
+            border: 2px solid #444; 
+            width: 120px; /* スマホで2つ並ぶサイズ */
+            height: 240px; 
         }
 
-        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 95%; max-width: 400px; margin: 15px auto; }
-        button.ctrl-btn { background: #333; color: white; border: none; padding: 15px; font-size: 18px; border-radius: 12px; border-bottom: 4px solid #111; touch-action: manipulation; }
-        .boost-btn { grid-column: span 3; background: #ff9800 !important; }
+        /* 操作ボタン：押しやすさを維持しつつコンパクトに */
+        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; width: 95%; max-width: 320px; margin: 10px auto; }
+        button.ctrl-btn { background: #333; color: white; border: none; padding: 12px; font-size: 18px; border-radius: 10px; border-bottom: 3px solid #111; touch-action: manipulation; }
+        .boost-btn { grid-column: span 3; background: #ff9800 !important; padding: 10px !important; }
         
         /* BGMスイッチ */
-        .switch { position: relative; display: inline-block; width: 44px; height: 22px; }
+        .switch { position: relative; display: inline-block; width: 34px; height: 18px; }
         .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #555; transition: .4s; border-radius: 22px; }
-        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #555; transition: .4s; border-radius: 18px; }
+        .slider:before { position: absolute; content: ""; height: 12px; width: 12px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
         input:checked + .slider { background-color: #f44336; }
-        input:checked + .slider:before { transform: translateX(22px); }
+        input:checked + .slider:before { transform: translateX(16px); }
         #youtube-player { position: absolute; top: -999px; left: -999px; }
     </style>
 </head>
 <body>
     <div id="start-overlay">
         <div class="start-box">
-            <h1>Tetris Battle</h1>
+            <h2 style="margin-top:0">Tetris Battle</h2>
             <input type="text" id="room-input" placeholder="Room ID" maxlength="10">
             <button id="start-button">バトル開始！</button>
         </div>
@@ -86,7 +75,7 @@
 
     <div class="top-controls">
         <div id="room-display">ROOM: ----</div>
-        <div style="display:flex; align-items:center; gap:8px;">
+        <div style="display:flex; align-items:center; gap:5px;">
             <span>BGM 🎵</span>
             <label class="switch">
                 <input type="checkbox" id="music-toggle">
@@ -95,21 +84,19 @@
         </div>
     </div>
 
-    <div id="status">対戦相手を待っています</div>
+    <div id="status">対戦相手待機中</div>
     
     <div class="main-layout">
         <div class="next-container">
-            <div style="font-size:10px; color:#aaa">NEXT</div>
-            <canvas id="next0" class="next-canvas" width="50" height="50"></canvas>
-            <canvas id="next1" class="next-canvas" width="50" height="50"></canvas>
-            <canvas id="next2" class="next-canvas" width="50" height="50"></canvas>
+            <div style="font-size:8px; color:#aaa">NEXT</div>
+            <canvas id="next0" class="next-canvas" width="30" height="30"></canvas>
+            <canvas id="next1" class="next-canvas" width="30" height="30"></canvas>
+            <canvas id="next2" class="next-canvas" width="30" height="30"></canvas>
         </div>
-
         <div class="player-block">
             <div class="player-label">YOU</div>
             <canvas id="localCanvas" class="game-canvas"></canvas>
         </div>
-
         <div class="player-block">
             <div class="player-label">RIVAL</div>
             <canvas id="remoteCanvas" class="game-canvas"></canvas>
@@ -118,10 +105,10 @@
 
     <div class="controls">
         <button class="ctrl-btn" onclick="handleInput('left')">←</button>
-        <button class="ctrl-btn" style="background:#2196f3" onclick="handleInput('rotate')">回転</button>
+        <button class="ctrl-btn" style="background:#2196f3" onclick="handleInput('rotate')">回</button>
         <button class="ctrl-btn" onclick="handleInput('right')">→</button>
-        <button class="ctrl-btn" style="grid-column:span 3; background:#f44336" onclick="handleInput('drop')">即落下</button>
-        <button class="ctrl-btn boost-btn" id="boost-button">加速（長押し）</button>
+        <button class="ctrl-btn" style="grid-column:span 3; background:#f44336; font-size:14px; padding:8px;" onclick="handleInput('drop')">即落下</button>
+        <button class="ctrl-btn boost-btn" id="boost-button" style="font-size:14px;">加速（長押し）</button>
     </div>
 
     <div id="youtube-player"></div>
@@ -130,7 +117,7 @@
     <script>
         const SERVER_URL = 'wss://tetris-server-7w6p.onrender.com';
         const VIDEO_ID = 'Doq1NWO6AtI'; 
-        const COLS = 10, ROWS = 20, BLOCK_SIZE = 25; // 描画時の1マスのサイズ
+        const COLS = 10, ROWS = 20, BLOCK_SIZE = 20;
 
         let socket, roomId, myId, isStarted = false, isFinished = false, isBoosting = false;
         let player, apiReady = false;
@@ -167,7 +154,7 @@
             if(!roomId) return;
             if (apiReady && player.playVideo) { player.playVideo(); player.pauseVideo(); }
             document.getElementById('start-overlay').style.display = 'none';
-            document.getElementById('room-display').innerText = "ROOM: " + roomId;
+            document.getElementById('room-display').innerText = "R:" + roomId;
             connect();
         };
 
@@ -183,7 +170,7 @@
                 const data = JSON.parse(e.data);
                 if (data.type === 'start') {
                     isStarted = true; isFinished = false; myId = data.userId;
-                    document.getElementById('status').innerText = "対戦中！";
+                    document.getElementById('status').innerText = "BATTLE!";
                     board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
                     nextQueue = Array.from({length:6}, () => Math.floor(Math.random()*7)+1);
                     spawnPiece();
@@ -207,7 +194,7 @@
             isFinished = true; isStarted = false;
             if(apiReady) player.pauseVideo();
             const s = document.getElementById('status');
-            s.innerText = win ? "✨ WIN ✨" : "LOSE";
+            s.innerText = win ? "WIN!" : "LOSE";
             s.className = win ? "win-screen" : "lose-screen";
             if(!win) socket.send(JSON.stringify({ type: 'lose', roomId }));
         }
@@ -224,7 +211,7 @@
                 if (pendingAttack > 0) {
                     for(let i=0; i<pendingAttack; i++){
                         board.shift();
-                        board.push(Array(COLS).fill(8).map((v, idx) => idx === Math.floor(COLS/2) ? 0 : 8));
+                        board.push(Array(COLS).fill(8).map((v, idx) => idx === 4 ? 0 : 8));
                     }
                     pendingAttack = 0;
                 }
@@ -259,7 +246,6 @@
 
         function drawBoard(ctx, b, p) {
             ctx.fillStyle = '#000'; ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);
-            // グリッド線
             ctx.strokeStyle = '#222';
             for(let i=0; i<=COLS; i++) { ctx.beginPath(); ctx.moveTo(i*BLOCK_SIZE, 0); ctx.lineTo(i*BLOCK_SIZE, ROWS*BLOCK_SIZE); ctx.stroke(); }
             for(let i=0; i<=ROWS; i++) { ctx.beginPath(); ctx.moveTo(0, i*BLOCK_SIZE); ctx.lineTo(COLS*BLOCK_SIZE, i*BLOCK_SIZE); ctx.stroke(); }
@@ -270,11 +256,11 @@
 
         function drawNext() {
             nextContexts.forEach((ctx, i) => {
-                ctx.fillStyle = '#000'; ctx.fillRect(0,0,50,50);
+                ctx.fillStyle = '#000'; ctx.fillRect(0,0,30,30);
                 const id = nextQueue[i]; if(!id) return;
                 const m = SHAPES[id]; ctx.fillStyle = COLORS[id];
-                const s = 10;
-                m.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect(x*s+10, y*s+10, s-2, s-2); }); });
+                const s = 6;
+                m.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect(x*s+5, y*s+5, s-1, s-1); }); });
             });
         }
 
