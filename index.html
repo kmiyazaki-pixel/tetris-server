@@ -2,20 +2,24 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>テトリス・インフェルノ - 極</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>テトリス・インフェルノ - 完結</title>
     <style>
-        /* スマホのコピー・選択・長押しメニューを完全に無効化 */
+        /* 1. 物理的に「選択」という概念をブラウザから奪う */
         * {
-            -webkit-user-select: none;
-            -webkit-touch-callout: none;
-            user-select: none;
-            -webkit-tap-highlight-color: transparent; /* タップ時の青い枠も消す */
+            -webkit-user-select: none !important;
+            -moz-user-select: none !important;
+            -ms-user-select: none !important;
+            user-select: none !important;
+            -webkit-touch-callout: none !important;
+            -webkit-tap-highlight-color: rgba(0,0,0,0) !important; /* タップ時の青枠を透明化 */
+            outline: none !important;
         }
-        
+
+        /* 2. 入力欄だけは触れるようにする */
         input {
-            -webkit-user-select: text; /* Room ID入力欄だけは文字入力できるように除外 */
-            user-select: text;
+            -webkit-user-select: auto !important;
+            user-select: auto !important;
         }
 
         body { 
@@ -25,17 +29,19 @@
             font-family: sans-serif; 
             margin: 0; 
             overflow: hidden; 
-            touch-action: none; /* ブラウザのスクロールやズームを完全停止 */
+            position: fixed; /* 画面が引っ張られるのを防ぐ */
+            width: 100%;
+            height: 100%;
+            touch-action: none; /* ブラウザのスクロール・ズームを全停止 */
         }
 
         .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 2000; }
         .box { background: #222; padding: 20px; border-radius: 20px; width: 85%; max-width: 300px; border: 2px solid #f44336; }
         .btn { width: 100%; padding: 15px; font-size: 18px; color: white; border: none; border-radius: 12px; cursor: pointer; margin-bottom: 12px; font-weight: bold; }
-        .btn-red { background: #f44336; box-shadow: 0 4px #881111; }
-        .btn-blue { background: #2196f3; box-shadow: 0 4px #114488; }
+        .btn-red { background: #f44336; }
+        .btn-blue { background: #2196f3; }
         
         .info-panel { display: flex; justify-content: space-around; background: #111; padding: 10px; font-size: 12px; border-bottom: 1px solid #333; }
-        .stat-label { color: #aaa; font-size: 10px; }
         .stat-val { color: #ffeb3b; display: block; font-size: 16px; font-weight: bold; }
         
         .main-layout { display: flex; justify-content: center; align-items: center; margin-top: 10px; visibility: hidden; }
@@ -43,63 +49,54 @@
         .game-canvas { width: 150px; height: 300px; }
         
         .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 90%; max-width: 360px; margin: 15px auto; }
-        .ctrl-btn { background: #333; color: white; border: none; padding: 20px; font-size: 24px; border-radius: 15px; border-bottom: 5px solid #000; }
-        .ctrl-btn:active { transform: translateY(2px); border-bottom-width: 2px; background: #444; }
+        .ctrl-btn { background: #333; color: white; border: none; padding: 20px; font-size: 24px; border-radius: 15px; border-bottom: 5px solid #000; touch-action: none; }
+        .ctrl-btn:active { transform: translateY(2px); border-bottom-width: 2px; }
         
-        #countdown { position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%); font-size: 70px; font-weight: bold; color: #f44336; z-index: 3000; display: none; pointer-events: none; }
-        
-        @keyframes shake { 0% { transform: translate(2px, 2px); } 50% { transform: translate(-2px, -2px); } 100% { transform: translate(0,0); } }
-        .shake { animation: shake 0.1s 2; }
+        #countdown { position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%); font-size: 70px; font-weight: bold; color: #f44336; z-index: 3000; display: none; }
     </style>
 </head>
-<body>
-    <audio id="bgm" loop><source src="Tetris DS OST - Mario Tetris.mp3" type="audio/mpeg"></audio>
+<body oncontextmenu="return false;"> <audio id="bgm" loop><source src="Tetris DS OST - Mario Tetris.mp3" type="audio/mpeg"></audio>
 
     <div id="start-overlay" class="overlay">
         <div class="box">
             <h1 style="color:#f44336; margin:0;">煉獄モード</h1>
-            <p style="font-size:12px; margin-bottom:20px;">加速と地雷が社長を襲う</p>
             <button class="btn btn-red" id="solo-btn">一人で地獄へ</button>
-            <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
-            <input type="text" id="room-input" placeholder="合言葉（ルームID）">
-            <button class="btn btn-blue" id="battle-btn">オンライン対戦</button>
+            <input type="text" id="room-input" placeholder="合言葉">
+            <button class="btn btn-blue" id="battle-btn">対戦開始</button>
         </div>
     </div>
 
     <div id="result-overlay" class="overlay" style="display:none;">
         <div class="box">
             <h2 id="result-text" style="color:#f44336;">終了</h2>
-            <p>スコア: <span id="final-score" style="color:#ffeb3b; font-size: 24px;">0</span></p>
-            <button class="btn btn-blue" onclick="location.reload()">タイトルへ</button>
+            <button class="btn btn-blue" onclick="location.reload()">もう一度</button>
         </div>
     </div>
 
     <div id="countdown"></div>
 
     <div class="info-panel">
-        <div><span class="stat-label">スコア</span><span id="score-disp" class="stat-val">0</span></div>
-        <div><span class="stat-label">レベル</span><span id="level-disp" class="stat-val">1</span></div>
-        <div id="timer-box"><span class="stat-label">地雷まで</span><span id="timer-disp" class="stat-val">12秒</span></div>
+        <div><span style="color:#aaa; font-size:10px;">スコア</span><span id="score-disp" class="stat-val">0</span></div>
+        <div><span style="color:#aaa; font-size:10px;">レベル</span><span id="level-disp" class="stat-val">1</span></div>
+        <div id="timer-box"><span style="color:#aaa; font-size:10px;">地雷まで</span><span id="timer-disp" class="stat-val">12秒</span></div>
     </div>
 
     <div class="main-layout" id="game-layout">
         <div style="margin-right:10px;">
-            <div style="font-size:10px; color:#aaa;">次</div>
             <canvas id="nextCanvas" width="40" height="40"></canvas>
         </div>
         <div id="remote-area" style="display:none; margin-right:10px;">
-            <div style="font-size:10px; color:#aaa;">相手</div>
             <canvas id="remoteCanvas" style="width:60px; height:120px; opacity:0.5;"></canvas>
         </div>
         <canvas id="localCanvas" class="game-canvas"></canvas>
     </div>
 
     <div class="controls">
-        <button class="ctrl-btn" onmousedown="handleInput('left')" ontouchstart="handleInput('left')">←</button>
-        <button class="ctrl-btn" style="background:#2196f3" onmousedown="handleInput('rotate')" ontouchstart="handleInput('rotate')">回転</button>
-        <button class="ctrl-btn" onmousedown="handleInput('right')" ontouchstart="handleInput('right')">→</button>
-        <button class="ctrl-btn" style="grid-column:span 3; background:#f44336; font-weight:bold;" onmousedown="handleInput('drop')" ontouchstart="handleInput('drop')">一気に落とす</button>
-        <button class="ctrl-btn" id="boost-btn" style="grid-column:span 3; background:#ff9800; font-size:16px; font-weight:bold;">長押しで加速</button>
+        <button class="ctrl-btn" ontouchstart="handleInput('left', event)">←</button>
+        <button class="ctrl-btn" style="background:#2196f3" ontouchstart="handleInput('rotate', event)">回</button>
+        <button class="ctrl-btn" ontouchstart="handleInput('right', event)">→</button>
+        <button class="ctrl-btn" style="grid-column:span 3; background:#f44336;" ontouchstart="handleInput('drop', event)">一気に落とす</button>
+        <button class="ctrl-btn" id="boost-btn" style="grid-column:span 3; background:#ff9800; font-size:16px;">長押しで加速</button>
     </div>
 
     <script>
@@ -173,8 +170,6 @@
             newRow[Math.floor(Math.random()*COLS)] = 0;
             board.push(newRow);
             if(piece && collide(board, piece)) piece.y--;
-            localCanvas.classList.add('shake');
-            setTimeout(() => localCanvas.classList.remove('shake'), 100);
         }
 
         function collide(b, p) {
@@ -209,7 +204,6 @@
                 }
                 spawnPiece();
             }
-            if(!isSolo && socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece }));
         }
 
         function updateUI() {
@@ -217,8 +211,12 @@
             document.getElementById('level-disp').innerText = level;
         }
 
-        function handleInput(type) {
-            event.preventDefault(); // スマホの誤動作を防止
+        // e.preventDefault()でブラウザの全動作をキャンセル
+        function handleInput(type, e) {
+            if(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
             if (!isStarted || isFinished || !piece) return;
             if (type === 'left') { piece.x--; if(collide(board, piece)) piece.x++; }
             if (type === 'right') { piece.x++; if(collide(board, piece)) piece.x--; }
@@ -233,19 +231,11 @@
         function showResult(win) {
             if(isFinished) return;
             isFinished = true; isStarted = false; bgm.pause();
-            document.getElementById('final-score').innerText = score;
             document.getElementById('result-overlay').style.display = "flex";
-            if(!isSolo && !win) socket.send(JSON.stringify({ type: 'lose', roomId }));
         }
 
-        document.getElementById('solo-btn').onclick = () => { isSolo = true; document.getElementById('timer-box').style.visibility = "visible"; initGame(); };
-        document.getElementById('battle-btn').onclick = () => {
-            roomId = document.getElementById('room-input').value.trim();
-            if(!roomId) return alert("合言葉は？");
-            isSolo = false; document.getElementById('timer-box').style.visibility = "hidden";
-            document.getElementById('remote-area').style.display = "block";
-            connect();
-        };
+        document.getElementById('solo-btn').onclick = () => { isSolo = true; initGame(); };
+        document.getElementById('battle-btn').onclick = () => { roomId = document.getElementById('room-input').value.trim(); isSolo = false; connect(); };
 
         function connect() {
             socket = new WebSocket(SERVER_URL);
@@ -268,8 +258,9 @@
         }
 
         const bBtn=document.getElementById('boost-btn');
-        bBtn.onmousedown = bBtn.ontouchstart = (e) => { e.preventDefault(); isBoosting = true; };
-        bBtn.onmouseup = bBtn.ontouchend = () => isBoosting = false;
+        // 加速ボタンも完全にイベントをガード
+        bBtn.addEventListener('touchstart', (e) => { e.preventDefault(); isBoosting = true; }, {passive: false});
+        bBtn.addEventListener('touchend', (e) => { e.preventDefault(); isBoosting = false; }, {passive: false});
         
         let lastTime=0, dropCounter=0;
         function gameLoop(time=0){
