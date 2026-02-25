@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Tetris Battle - Fixed</title>
+    <title>Tetris Battle Final - Boost Edition</title>
     <style>
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
-        #status { background: #4caf50; padding: 10px; font-weight: bold; font-size: 18px; min-height: 24px; }
+        #status { background: #4caf50; padding: 10px; font-weight: bold; font-size: 18px; min-height: 24px; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
         .win-screen { background: #ffc107 !important; color: #000 !important; font-size: 24px !important; }
         .lose-screen { background: #f44336 !important; color: #fff !important; font-size: 24px !important; }
         
@@ -19,8 +19,12 @@
 
         .game-area { display: flex; gap: 10px; }
         canvas { background: #000; border: 2px solid #444; width: 140px; height: 280px; }
-        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 90%; max-width: 320px; margin: 15px auto; }
-        button { background: #333; color: white; border: none; padding: 20px; font-size: 20px; border-radius: 12px; border-bottom: 4px solid #111; touch-action: manipulation; }
+
+        /* コントローラー */
+        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 95%; max-width: 340px; margin: 15px auto; }
+        button { background: #333; color: white; border: none; padding: 18px; font-size: 20px; border-radius: 12px; border-bottom: 4px solid #111; touch-action: manipulation; -webkit-user-select: none; }
+        button:active { border-bottom: 0; transform: translateY(4px); }
+        .boost-btn { grid-column: span 3; background: #ff9800 !important; margin-top: -5px; }
     </style>
 </head>
 <body>
@@ -45,12 +49,19 @@
         <button style="background:#2196f3" onclick="handleInput('rotate')">回転</button>
         <button onclick="handleInput('right')">→</button>
         <button style="grid-column:span 3; background:#f44336" onclick="handleInput('drop')">即落下</button>
+        <button class="boost-btn" 
+                ontouchstart="isBoosting = true" 
+                ontouchend="isBoosting = false" 
+                onmousedown="isBoosting = true" 
+                onmouseup="isBoosting = false" 
+                onmouseleave="isBoosting = false">加速（長押し）</button>
     </div>
 
     <script>
         const SERVER_URL = 'wss://tetris-server-7w6p.onrender.com';
         const COLS = 10, ROWS = 20, BLOCK_SIZE = 20;
         let socket, roomId, myId, isStarted = false, isFinished = false;
+        let isBoosting = false;
         
         const localCtx = document.getElementById('localCanvas').getContext('2d');
         const remoteCtx = document.getElementById('remoteCanvas').getContext('2d');
@@ -90,16 +101,10 @@
                     document.getElementById('status').innerText = "対戦中！"; 
                     document.getElementById('status').className = "";
                     board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
-                    
-                    // ★ 修正ポイント：キューを確実に初期化
                     nextQueue = [];
-                    for(let i=0; i<4; i++) {
-                        nextQueue.push(Math.floor(Math.random() * 7) + 1);
-                    }
-                    // 最初の1個目を取り出す
+                    for(let i=0; i<4; i++) nextQueue.push(Math.floor(Math.random() * 7) + 1);
                     const firstId = nextQueue.shift();
                     piece = { id: firstId, matrix: SHAPES[firstId], x: 3, y: 0 };
-                    
                     requestAnimationFrame(gameLoop);
                 }
                 if (data.type === 'lose' && !isFinished) showResult(true);
@@ -121,7 +126,7 @@
                 if (!id) return;
                 const matrix = SHAPES[id];
                 ctx.fillStyle = COLORS[id];
-                const s = 8; // 少し小さくして中央寄せ
+                const s = 8;
                 const offset = (40 - matrix[0].length * s) / 2;
                 matrix.forEach((row, y) => {
                     row.forEach((v, x) => {
@@ -138,9 +143,7 @@
                 piece.y--;
                 piece.matrix.forEach((row, y) => { 
                     row.forEach((v, x) => { 
-                        if(v) {
-                            if(board[y+piece.y]) board[y+piece.y][x+piece.x] = piece.id; 
-                        }
+                        if(v && board[y+piece.y]) board[y+piece.y][x+piece.x] = piece.id; 
                     }); 
                 });
                 
@@ -163,11 +166,9 @@
                     document.getElementById('status').innerText = "対戦中！";
                 }
 
-                // ★ 次のブロックへ
                 const nextId = nextQueue.shift();
                 nextQueue.push(Math.floor(Math.random() * 7) + 1);
                 piece = { id: nextId, matrix: SHAPES[nextId], x: 3, y: 0 };
-                
                 if (collide(board, piece)) showResult(false);
             }
             sync();
@@ -221,7 +222,8 @@
             const dt = time - lastTime; lastTime = time;
             if (isStarted && !isFinished) {
                 dropCounter += dt; syncCounter += dt;
-                if (dropCounter > 1000) { drop(); dropCounter = 0; }
+                const dropInterval = isBoosting ? 50 : 1000;
+                if (dropCounter > dropInterval) { drop(); dropCounter = 0; }
                 if (syncCounter > 100) { sync(); syncCounter = 0; }
             }
             drawBoard(localCtx, board, piece);
