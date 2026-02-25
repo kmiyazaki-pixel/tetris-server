@@ -3,73 +3,83 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Tetris Battle - Sync Rematch</title>
+    <title>Tetris Battle & Solo</title>
     <style>
-        /* スタイルは前回のものを継承しつつ、通知メッセージを調整 */
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
-        .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
-        .box { background: #333; padding: 30px 20px; border-radius: 20px; width: 85%; max-width: 280px; }
-        input[type="text"] { width: 100%; padding: 12px; font-size: 18px; border-radius: 8px; border: none; margin-bottom: 15px; text-align: center; box-sizing: border-box; background: #222; color: white; }
-        .btn { width: 100%; padding: 12px; font-size: 18px; color: white; border: none; border-radius: 8px; cursor: pointer; margin-bottom: 10px; border-bottom: 4px solid rgba(0,0,0,0.3); }
+        .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
+        .box { background: #333; padding: 25px; border-radius: 20px; width: 85%; max-width: 300px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        
+        /* ボタンデザイン */
+        .btn { width: 100%; padding: 15px; font-size: 18px; color: white; border: none; border-radius: 12px; cursor: pointer; margin-bottom: 12px; border-bottom: 4px solid rgba(0,0,0,0.3); font-weight: bold; transition: 0.1s; }
+        .btn-green { background: #4caf50; }
         .btn-blue { background: #2196f3; }
         .btn-gray { background: #666; }
-        
-        #result-overlay { display: none; z-index: 110; }
-        #result-text { font-size: 40px; font-weight: bold; margin-bottom: 20px; }
-        .waiting-msg { font-size: 14px; color: #ffeb3b; margin-top: 10px; min-height: 1.5em; }
+        .btn:active { transform: translateY(2px); border-bottom-width: 2px; }
 
-        #countdown-overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 60px; font-weight: bold; color: #ffeb3b; text-shadow: 0 0 20px rgba(0,0,0,0.8); z-index: 150; display: none; pointer-events: none; }
+        input[type="text"] { width: 100%; padding: 12px; font-size: 16px; border-radius: 8px; border: 2px solid #444; margin-bottom: 10px; text-align: center; box-sizing: border-box; background: #222; color: white; }
+        
+        #countdown-overlay { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 60px; font-weight: bold; color: #ffeb3b; text-shadow: 0 0 20px rgba(0,0,0,0.8); z-index: 150; display: none; }
         #status { background: #4caf50; padding: 5px; font-weight: bold; font-size: 14px; }
         .top-controls { display: flex; justify-content: space-around; align-items: center; background: #222; padding: 5px; font-size: 12px; }
-        .main-layout { display: flex; justify-content: center; align-items: flex-start; gap: 5px; margin-top: 10px; }
-        canvas.game-canvas { background: #000; border: 2px solid #444; width: 120px; height: 240px; }
-        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; width: 95%; max-width: 320px; margin: 10px auto; }
-        .ctrl-btn { background: #333; color: white; border: none; padding: 12px; font-size: 18px; border-radius: 10px; border-bottom: 3px solid #111; touch-action: manipulation; }
-        .boost-btn { grid-column: span 3; background: #ff9800 !important; font-size: 14px; padding: 10px !important; }
+        
+        .main-layout { display: flex; justify-content: center; align-items: flex-start; gap: 8px; margin-top: 10px; }
+        .player-block { display: flex; flex-direction: column; align-items: center; }
+        canvas.game-canvas { background: #000; border: 2px solid #444; width: 130px; height: 260px; }
+        
+        /* 一人用の時は相手を消す */
+        .solo-mode #remote-block { display: none; }
+        .solo-mode canvas.game-canvas { width: 180px; height: 360px; } /* 一人用の時は少し大きく表示 */
+
+        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 90%; max-width: 340px; margin: 15px auto; }
+        .ctrl-btn { background: #333; color: white; border: none; padding: 15px; font-size: 20px; border-radius: 12px; border-bottom: 4px solid #111; touch-action: manipulation; }
+        .boost-btn { grid-column: span 3; background: #ff9800 !important; font-size: 16px; padding: 12px !important; }
+        
         .next-container { display: flex; flex-direction: column; gap: 5px; border: 1px solid #555; background: #000; padding: 5px; border-radius: 5px; }
-        .next-canvas { background: #000; width: 30px; height: 30px; }
     </style>
 </head>
-<body>
+<body class="battle-mode">
     <audio id="bgm" loop><source src="Tetris DS OST - Mario Tetris.mp3" type="audio/mpeg"></audio>
 
     <div id="start-overlay" class="overlay">
         <div class="box">
-            <h2 style="margin-top:0">Tetris Battle</h2>
-            <input type="text" id="room-input" placeholder="Room ID" maxlength="10">
-            <button class="btn btn-blue" id="start-button">バトル開始！</button>
+            <h2 style="margin-top:0">Tetris Game</h2>
+            <button class="btn btn-green" onclick="startSolo()">一人で練習</button>
+            <div style="margin: 15px 0; border-top: 1px solid #555; padding-top: 15px;">
+                <input type="text" id="room-input" placeholder="Room ID" maxlength="10">
+                <button class="btn btn-blue" onclick="startBattle()">オンライン対戦</button>
+            </div>
         </div>
     </div>
 
-    <div id="result-overlay" class="overlay">
+    <div id="result-overlay" class="overlay" style="display:none;">
         <div class="box">
-            <div id="result-text">WIN!</div>
-            <button class="btn btn-blue" id="rematch-button">もう一回対戦</button>
-            <button class="btn btn-gray" id="quit-button">タイトルへ戻る</button>
-            <div id="rematch-status" class="waiting-msg"></div>
+            <div id="result-text" style="font-size:32px; font-weight:bold; margin-bottom:20px;">FINISH</div>
+            <button class="btn btn-blue" id="rematch-button">もう一回</button>
+            <button class="btn btn-gray" onclick="location.reload()">タイトルへ</button>
+            <div id="rematch-status" style="font-size:12px; color:#ffeb3b; margin-top:10px;"></div>
         </div>
     </div>
 
     <div id="countdown-overlay">Ready...</div>
 
     <div class="top-controls">
-        <div id="room-display">ROOM: ----</div>
+        <div id="mode-display">MODE: ----</div>
         <div>BGM <input type="checkbox" id="music-toggle" checked onchange="updateMusic()"></div>
     </div>
-    <div id="status">対戦相手待機中</div>
+    <div id="status">READY?</div>
     
-    <div class="main-layout">
+    <div class="main-layout" id="game-area">
         <div class="next-container">
             <div style="font-size:8px; color:#aaa">NEXT</div>
-            <canvas id="next0" class="next-canvas" width="30" height="30"></canvas>
-            <canvas id="next1" class="next-canvas" width="30" height="30"></canvas>
-            <canvas id="next2" class="next-canvas" width="30" height="30"></canvas>
+            <canvas id="next0" width="30" height="30"></canvas>
+            <canvas id="next1" width="30" height="30"></canvas>
+            <canvas id="next2" width="30" height="30"></canvas>
         </div>
-        <div style="display:flex; flex-direction:column; align-items:center;">
+        <div class="player-block">
             <div style="font-size:10px; color:#aaa">YOU</div>
             <canvas id="localCanvas" class="game-canvas"></canvas>
         </div>
-        <div style="display:flex; flex-direction:column; align-items:center;">
+        <div class="player-block" id="remote-block">
             <div style="font-size:10px; color:#aaa">RIVAL</div>
             <canvas id="remoteCanvas" class="game-canvas"></canvas>
         </div>
@@ -77,9 +87,9 @@
 
     <div class="controls">
         <button class="ctrl-btn" onclick="handleInput('left')">←</button>
-        <button class="ctrl-btn" style="background:#2196f3" onclick="handleInput('rotate')">回転</button>
+        <button class="ctrl-btn" style="background:#2196f3" onclick="handleInput('rotate')">回</button>
         <button class="ctrl-btn" onclick="handleInput('right')">→</button>
-        <button class="ctrl-btn" style="grid-column:span 3; background:#f44336; font-size:14px; padding:8px;" onclick="handleInput('drop')">即落下</button>
+        <button class="ctrl-btn" style="grid-column:span 3; background:#f44336; font-size:14px; padding:10px;" onclick="handleInput('drop')">即落下</button>
         <button class="ctrl-btn boost-btn" id="boost-button">加速（長押し）</button>
     </div>
 
@@ -87,112 +97,70 @@
         const SERVER_URL = 'wss://tetris-server-7w6p.onrender.com';
         const COLS = 10, ROWS = 20, BLOCK_SIZE = 20;
         const bgm = document.getElementById('bgm');
-        const countdownEl = document.getElementById('countdown-overlay');
-        const resultOverlay = document.getElementById('result-overlay');
-        const rematchStatus = document.getElementById('rematch-status');
+        const statusEl = document.getElementById('status');
+        
+        let socket, roomId, myId, isStarted = false, isFinished = false, isBoosting = false, isSolo = false;
+        let iamReady = false, rivalReady = false;
 
-        let socket, roomId, myId, isStarted = false, isFinished = false, isBoosting = false, isCountingDown = false;
-        let iamReadyForRematch = false, rivalReadyForRematch = false;
-
-        function updateMusic() {
-            const toggle = document.getElementById('music-toggle');
-            if (toggle.checked && (isStarted || isCountingDown) && !isFinished) bgm.play().catch(e => {});
-            else bgm.pause();
+        // --- モード開始関数 ---
+        function startSolo() {
+            isSolo = true;
+            document.body.className = "solo-mode";
+            document.getElementById('mode-display').innerText = "SOLO";
+            document.getElementById('start-overlay').style.display = 'none';
+            statusEl.innerText = "PRACTICE";
+            initGame();
         }
 
-        document.getElementById('start-button').onclick = () => {
+        function startBattle() {
             roomId = document.getElementById('room-input').value.trim();
-            if(!roomId) return;
-            bgm.play().then(() => bgm.pause()).catch(e => {});
+            if(!roomId) return alert("ルームIDを入力してください");
+            isSolo = false;
+            document.body.className = "battle-mode";
+            document.getElementById('mode-display').innerText = "ROOM: " + roomId;
             document.getElementById('start-overlay').style.display = 'none';
-            document.getElementById('room-display').innerText = "R:" + roomId;
+            statusEl.innerText = "WAITING RIVAL...";
             connect();
-        };
+        }
 
+        // --- 通信・ゲーム管理 ---
         function connect() {
             socket = new WebSocket(SERVER_URL);
             socket.onopen = () => socket.send(JSON.stringify({ type: 'join', roomId }));
             socket.onmessage = (e) => {
                 const data = JSON.parse(e.data);
-                if (data.type === 'start') initGame();
+                if (data.type === 'start') { myId = data.userId; initGame(); }
                 if (data.type === 'lose' && !isFinished) showResult(true);
                 if (data.type === 'gameData' && data.sender !== myId) { remoteBoard = data.board; remotePiece = data.piece; }
                 if (data.type === 'attack') pendingAttack += data.lines;
-                
-                // リマッチ通信
-                if (data.type === 'rematch_request') {
-                    if (data.sender !== myId) {
-                        rivalReadyForRematch = true;
-                        rematchStatus.innerText = "相手が再戦を待っています！";
-                    }
-                    if (iamReadyForRematch && rivalReadyForRematch) initGame();
+                if (data.type === 'rematch_request' && data.sender !== myId) {
+                    rivalReady = true;
+                    document.getElementById('rematch-status').innerText = "相手が再戦を待っています！";
+                    if (iamReady) initGame();
                 }
             };
         }
 
         function initGame() {
-            resultOverlay.style.display = 'none';
-            iamReadyForRematch = false; rivalReadyForRematch = false;
-            rematchStatus.innerText = "";
+            document.getElementById('result-overlay').style.display = 'none';
+            iamReady = false; rivalReady = false;
+            document.getElementById('rematch-status').innerText = "";
             isStarted = false; isFinished = false;
             board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
             remoteBoard = Array.from({length: ROWS}, () => Array(COLS).fill(0));
             nextQueue = Array.from({length:6}, () => Math.floor(Math.random()*7)+1);
             spawnPiece();
-            startCountdown();
-        }
-
-        function startCountdown() {
-            isCountingDown = true; updateMusic();
-            countdownEl.innerText = "Ready..."; countdownEl.style.display = "block";
+            
+            // 演出
+            const cd = document.getElementById('countdown-overlay');
+            cd.innerText = "Ready..."; cd.style.display = "block";
+            updateMusic();
             setTimeout(() => {
-                countdownEl.innerText = "GO!";
-                setTimeout(() => { countdownEl.style.display = "none"; isCountingDown = false; isStarted = true; }, 800);
+                cd.innerText = "GO!";
+                setTimeout(() => { cd.style.display = "none"; isStarted = true; }, 800);
             }, 1500);
         }
 
         function showResult(win) {
             if (isFinished) return;
-            isFinished = true; isStarted = false; updateMusic();
-            document.getElementById('result-text').innerText = win ? "✨ WIN ✨" : "LOSE";
-            document.getElementById('result-text').style.color = win ? "#ffc107" : "#f44336";
-            resultOverlay.style.display = "flex";
-            if(!win) socket.send(JSON.stringify({ type: 'lose', roomId }));
-        }
-
-        document.getElementById('rematch-button').onclick = () => {
-            iamReadyForRematch = true;
-            rematchStatus.innerText = "あなたの準備完了！相手を待っています...";
-            socket.send(JSON.stringify({ type: 'rematch_request', roomId }));
-            if (iamReadyForRematch && rivalReadyForRematch) initGame();
-        };
-
-        document.getElementById('quit-button').onclick = () => location.reload();
-
-        // --- コアロジック ---
-        const localCanvas = document.getElementById('localCanvas'), remoteCanvas = document.getElementById('remoteCanvas');
-        localCanvas.width = remoteCanvas.width = COLS * BLOCK_SIZE;
-        localCanvas.height = remoteCanvas.height = ROWS * BLOCK_SIZE;
-        const localCtx = localCanvas.getContext('2d'), remoteCtx = remoteCanvas.getContext('2d');
-        const nextContexts = [document.getElementById('next0').getContext('2d'), document.getElementById('next1').getContext('2d'), document.getElementById('next2').getContext('2d')];
-        const COLORS = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF', '#777777'];
-        const SHAPES = [null, [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]]];
-        let board = [], piece = null, nextQueue = [], remoteBoard = [], remotePiece = null, pendingAttack = 0;
-
-        function spawnPiece() { const id = nextQueue.shift(); nextQueue.push(Math.floor(Math.random()*7)+1); piece = { id, matrix: SHAPES[id], x: 3, y: 0 }; if (collide(board, piece)) showResult(false); }
-        function drop() { if (!isStarted || isFinished || !piece) return; piece.y++; if (collide(board, piece)) { piece.y--; piece.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v && board[y+piece.y]) board[y+piece.y][x+piece.x] = piece.id; }); }); let cleared = 0; for (let y = ROWS-1; y>=0; y--) { if (board[y].every(cell => cell!==0)) { board.splice(y,1); board.unshift(Array(COLS).fill(0)); cleared++; y++; } } if (cleared >= 2) socket.send(JSON.stringify({ type: 'attack', roomId, lines: cleared-1 })); if (pendingAttack > 0) { for(let i=0; i<pendingAttack; i++){ board.shift(); board.push(Array(COLS).fill(8).map((v, idx) => idx === 4 ? 0 : 8)); } pendingAttack = 0; } spawnPiece(); } sync(); }
-        function collide(b, p) { for(let y=0; y<p.matrix.length; y++) { for(let x=0; x<p.matrix[y].length; x++) { if(p.matrix[y][x] && (!b[y+p.y] || b[y+p.y][x+p.x]!==0)) return true; } } return false; }
-        function handleInput(type) { if (!isStarted || isFinished || !piece) return; if (type === 'left') { piece.x--; if(collide(board, piece)) piece.x++; } if (type === 'right') { piece.x++; if(collide(board, piece)) piece.x--; } if (type === 'rotate') { const pre = piece.matrix; piece.matrix = piece.matrix[0].map((_, i) => piece.matrix.map(row => row[i]).reverse()); if(collide(board, piece)) piece.matrix = pre; } if (type === 'drop') { while(!collide(board, piece)) { piece.y++; } piece.y--; drop(); } sync(); }
-        function sync() { if (socket?.readyState === WebSocket.OPEN && isStarted) socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece })); }
-        function drawBoard(ctx, b, p) { ctx.fillStyle = '#000'; ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height); ctx.strokeStyle = '#222'; for(let i=0; i<=COLS; i++) { ctx.beginPath(); ctx.moveTo(i*BLOCK_SIZE, 0); ctx.lineTo(i*BLOCK_SIZE, ROWS*BLOCK_SIZE); ctx.stroke(); } for(let i=0; i<=ROWS; i++) { ctx.beginPath(); ctx.moveTo(0, i*BLOCK_SIZE); ctx.lineTo(COLS*BLOCK_SIZE, i*BLOCK_SIZE); ctx.stroke(); } if(b) b.forEach((row, y) => { row.forEach((v, x) => { if(v){ ctx.fillStyle = COLORS[v]; ctx.fillRect(x*BLOCK_SIZE+1, y*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); } }); }); if(p){ ctx.fillStyle = COLORS[p.id]; p.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect((p.x+x)*BLOCK_SIZE+1, (p.y+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); }); }); } }
-        function drawNext() { nextContexts.forEach((ctx, i) => { ctx.fillStyle = '#000'; ctx.fillRect(0,0,30,30); const id = nextQueue[i]; if(!id) return; const m = SHAPES[id]; ctx.fillStyle = COLORS[id]; const s = 6; m.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect(x*s+5, y*s+5, s-1, s-1); }); }); }); }
-        let lastTime = 0, dropCounter = 0;
-        function gameLoop(time = 0) { const dt = time - lastTime; lastTime = time; if (isStarted && !isFinished) { dropCounter += dt; if (dropCounter > (isBoosting ? 50 : 800)) { drop(); dropCounter = 0; } } drawBoard(localCtx, board, piece); drawBoard(remoteCtx, remoteBoard, remotePiece); drawNext(); requestAnimationFrame(gameLoop); }
-        gameLoop();
-        const boostBtn = document.getElementById('boost-button');
-        boostBtn.onmousedown = boostBtn.ontouchstart = () => isBoosting = true;
-        boostBtn.onmouseup = boostBtn.ontouchend = () => isBoosting = false;
-    </script>
-</body>
-</html>
-
+            isFinished = true; isStarted = false;
