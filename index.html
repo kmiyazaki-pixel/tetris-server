@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Tetris Battle & Solo - Grid Fixed</title>
+    <title>Tetris Battle & Solo - NEXT added</title>
     <style>
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; touch-action: manipulation; }
         .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #1a1a1a; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 2000; }
@@ -14,12 +14,23 @@
         .btn-gray { background: #666; }
         .btn:active { transform: translateY(2px); border-bottom-width: 2px; }
         input[type="text"] { width: 100%; padding: 12px; font-size: 16px; border-radius: 8px; border: 2px solid #444; margin-bottom: 10px; text-align: center; background: #222; color: white; }
+        
         #status { background: #4caf50; padding: 5px; font-weight: bold; font-size: 14px; height: 20px; }
         .top-controls { display: flex; justify-content: space-around; align-items: center; background: #222; padding: 10px; font-size: 12px; }
-        .main-layout { display: flex; justify-content: center; align-items: flex-start; gap: 8px; margin-top: 10px; visibility: hidden; }
+        
+        /* NEXTエリアのスタイル */
+        .next-panel { background: #000; border: 1px solid #555; padding: 5px; border-radius: 5px; margin-bottom: 5px; }
+        .next-label { font-size: 10px; color: #aaa; margin-bottom: 2px; }
+        .next-canvas { background: #000; }
+
+        .main-layout { display: flex; justify-content: center; align-items: flex-start; gap: 10px; margin-top: 10px; visibility: hidden; }
         canvas { background: #000; border: 2px solid #444; }
         .game-canvas { width: 120px; height: 240px; }
-        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 90%; max-width: 340px; margin: 15px auto; }
+        
+        /* 一人用の時は少し大きく */
+        .solo-mode .game-canvas { width: 150px; height: 300px; }
+
+        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 90%; max-width: 340px; margin: 10px auto; }
         .ctrl-btn { background: #333; color: white; border: none; padding: 15px; font-size: 20px; border-radius: 12px; border-bottom: 4px solid #111; }
         #countdown { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 60px; font-weight: bold; color: #ffeb3b; z-index: 3000; display: none; pointer-events: none; }
     </style>
@@ -56,6 +67,11 @@
     <div id="status">PRESS START</div>
     
     <div class="main-layout" id="game-layout">
+        <div class="next-panel">
+            <div class="next-label">NEXT</div>
+            <canvas id="nextCanvas" width="40" height="40" class="next-canvas"></canvas>
+        </div>
+
         <div id="remote-block" style="display:flex; flex-direction:column; align-items:center;">
             <div style="font-size:10px; color:#aaa">RIVAL</div>
             <canvas id="remoteCanvas" class="game-canvas"></canvas>
@@ -68,7 +84,7 @@
 
     <div class="controls">
         <button class="ctrl-btn" id="l-btn">←</button>
-        <button class="ctrl-btn" id="r-btn" style="background:#2196f3">回転</button>
+        <button class="ctrl-btn" id="r-btn" style="background:#2196f3">回</button>
         <button class="ctrl-btn" id="ri-btn">→</button>
         <button class="ctrl-btn" id="d-btn" style="grid-column:span 3; background:#f44336; font-size:14px;">即落下</button>
         <button class="ctrl-btn boost-btn" id="boost-btn" style="grid-column:span 3; background:#ff9800; font-size:14px;">加速（長押し）</button>
@@ -84,6 +100,7 @@
 
         document.getElementById('solo-btn').onclick = () => {
             isSolo = true;
+            document.body.classList.add('solo-mode');
             document.getElementById('remote-block').style.display = 'none';
             setupGame("SOLO PRACTICE");
         };
@@ -92,6 +109,7 @@
             roomId = document.getElementById('room-input').value.trim();
             if(!roomId) return alert("Room ID!");
             isSolo = false;
+            document.body.classList.remove('solo-mode');
             document.getElementById('remote-block').style.display = 'flex';
             setupGame("WAITING...");
             connect();
@@ -159,14 +177,22 @@
         }
 
         const localCanvas = document.getElementById('localCanvas'), remoteCanvas = document.getElementById('remoteCanvas');
+        const nextCanvas = document.getElementById('nextCanvas');
         localCanvas.width = remoteCanvas.width = COLS * BLOCK_SIZE;
         localCanvas.height = remoteCanvas.height = ROWS * BLOCK_SIZE;
-        const localCtx = localCanvas.getContext('2d'), remoteCtx = remoteCanvas.getContext('2d');
+        const localCtx = localCanvas.getContext('2d'), remoteCtx = remoteCanvas.getContext('2d'), nextCtx = nextCanvas.getContext('2d');
+        
         const COLORS = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF', '#777777'];
         const SHAPES = [null, [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]]];
         let board = [], piece = null, nextQueue = [], remoteBoard = [], remotePiece = null, pendingAttack = 0;
 
-        function spawnPiece() { const id = nextQueue.shift(); nextQueue.push(Math.floor(Math.random()*7)+1); piece = { id, matrix: SHAPES[id], x: 3, y: 0 }; if (collide(board, piece)) showResult(false); }
+        function spawnPiece() { 
+            const id = nextQueue.shift(); 
+            nextQueue.push(Math.floor(Math.random()*7)+1); 
+            piece = { id, matrix: SHAPES[id], x: 3, y: 0 }; 
+            if (collide(board, piece)) showResult(false); 
+        }
+
         function drop() {
             if (!isStarted || isFinished || !piece) return;
             piece.y++;
@@ -181,6 +207,7 @@
             }
             if(!isSolo) sync();
         }
+
         function collide(b, p) { for(let y=0; y<p.matrix.length; y++) { for(let x=0; x<p.matrix[y].length; x++) { if(p.matrix[y][x] && (!b[y+p.y] || b[y+p.y][x+p.x]!==0)) return true; } } return false; }
         function handleInput(type) {
             if (!isStarted || isFinished || !piece) return;
@@ -192,23 +219,30 @@
         }
         function sync() { if (socket?.readyState === WebSocket.OPEN && isStarted) socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece })); }
 
-        // --- グリッド線描画を追加 ---
+        // グリッド線＋盤面描画
         function drawBoard(ctx, b, p) {
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-            
-            // マス目の線を描画
-            ctx.strokeStyle = '#222'; // 線の色
-            ctx.lineWidth = 1;
-            for(let i = 0; i <= COLS; i++) {
-                ctx.beginPath(); ctx.moveTo(i * BLOCK_SIZE, 0); ctx.lineTo(i * BLOCK_SIZE, ROWS * BLOCK_SIZE); ctx.stroke();
-            }
-            for(let i = 0; i <= ROWS; i++) {
-                ctx.beginPath(); ctx.moveTo(0, i * BLOCK_SIZE); ctx.lineTo(COLS * BLOCK_SIZE, i * BLOCK_SIZE); ctx.stroke();
-            }
-
+            ctx.strokeStyle = '#222';
+            for(let i = 0; i <= COLS; i++) { ctx.beginPath(); ctx.moveTo(i*BLOCK_SIZE, 0); ctx.lineTo(i*BLOCK_SIZE, ROWS*BLOCK_SIZE); ctx.stroke(); }
+            for(let i = 0; i <= ROWS; i++) { ctx.beginPath(); ctx.moveTo(0, i*BLOCK_SIZE); ctx.lineTo(COLS*BLOCK_SIZE, i*BLOCK_SIZE); ctx.stroke(); }
             if(b) b.forEach((row, y) => { row.forEach((v, x) => { if(v){ ctx.fillStyle = COLORS[v]; ctx.fillRect(x*BLOCK_SIZE+1, y*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); } }); });
             if(p){ ctx.fillStyle = COLORS[p.id]; p.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect((p.x+x)*BLOCK_SIZE+1, (p.y+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); }); }); }
+        }
+
+        // --- NEXTブロックの描画関数 ---
+        function drawNext() {
+            nextCtx.fillStyle = '#000';
+            nextCtx.fillRect(0, 0, nextCanvas.width, nextCanvas.height);
+            const id = nextQueue[0];
+            const m = SHAPES[id];
+            const size = 8; // NEXT表示用のブロックサイズ
+            nextCtx.fillStyle = COLORS[id];
+            m.forEach((row, y) => {
+                row.forEach((v, x) => {
+                    if (v) nextCtx.fillRect(x * size + 10, y * size + 10, size - 1, size - 1);
+                });
+            });
         }
         
         document.getElementById('l-btn').onclick = () => handleInput('left');
@@ -222,9 +256,13 @@
         let lastTime = 0, dropCounter = 0;
         function gameLoop(time = 0) {
             const dt = time - lastTime; lastTime = time;
-            if (isStarted && !isFinished) { dropCounter += dt; if (dropCounter > (isBoosting ? 50 : 800)) { drop(); dropCounter = 0; } }
+            if (isStarted && !isFinished) { 
+                dropCounter += dt; 
+                if (dropCounter > (isBoosting ? 50 : 800)) { drop(); dropCounter = 0; } 
+            }
             drawBoard(localCtx, board, piece);
             if(!isSolo) drawBoard(remoteCtx, remoteBoard, remotePiece);
+            drawNext(); // NEXTを毎フレーム更新
             requestAnimationFrame(gameLoop);
         }
         gameLoop();
