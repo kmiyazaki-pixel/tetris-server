@@ -3,65 +3,32 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Tetris Battle - Mobile Compact</title>
+    <title>Tetris Battle - Audio Fixed</title>
     <style>
+        /* スタイルは前回のコンパクト版を維持 */
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
-        
-        /* スタート画面 */
-        #start-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #1a1a1a; display: flex; flex-direction: column;
-            justify-content: center; align-items: center; z-index: 100;
-        }
+        #start-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #1a1a1a; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; }
         .start-box { background: #333; padding: 30px 20px; border-radius: 20px; width: 85%; max-width: 280px; }
         input[type="text"] { width: 100%; padding: 12px; font-size: 18px; border-radius: 8px; border: none; margin-bottom: 15px; text-align: center; box-sizing: border-box; background: #222; color: white; }
         #start-button { width: 100%; padding: 12px; font-size: 18px; background: #2196f3; color: white; border: none; border-radius: 8px; cursor: pointer; border-bottom: 4px solid #0d47a1; }
-
-        /* ゲーム画面レイアウト：全体を縮小 */
         #status { background: #4caf50; padding: 5px; font-weight: bold; font-size: 14px; min-height: 20px; }
-        .win-screen { background: #ffc107 !important; color: #000 !important; }
-        .lose-screen { background: #f44336 !important; color: #fff !important; }
-        
         .top-controls { display: flex; justify-content: space-around; align-items: center; background: #222; padding: 5px; font-size: 12px; }
-        
-        .main-layout { 
-            display: flex; 
-            justify-content: center; 
-            align-items: flex-start; 
-            gap: 5px; /* 隙間を最小限に */
-            margin-top: 10px;
-        }
-
+        .main-layout { display: flex; justify-content: center; align-items: flex-start; gap: 5px; margin-top: 10px; }
         .player-block { display: flex; flex-direction: column; align-items: center; }
         .player-label { font-size: 10px; margin-bottom: 2px; color: #aaa; }
-
-        .next-container { 
-            display: flex; flex-direction: column; gap: 5px; 
-            border: 1px solid #555; background: #000; padding: 5px; border-radius: 5px;
-        }
-        .next-canvas { background: #000; width: 30px; height: 30px; } /* NEXTを小さく */
-        
-        /* キャンバスサイズをスマホ向けに縮小 */
-        canvas.game-canvas { 
-            background: #000; 
-            border: 2px solid #444; 
-            width: 120px; /* スマホで2つ並ぶサイズ */
-            height: 240px; 
-        }
-
-        /* 操作ボタン：押しやすさを維持しつつコンパクトに */
+        .next-container { display: flex; flex-direction: column; gap: 5px; border: 1px solid #555; background: #000; padding: 5px; border-radius: 5px; }
+        .next-canvas { background: #000; width: 30px; height: 30px; }
+        canvas.game-canvas { background: #000; border: 2px solid #444; width: 120px; height: 240px; }
         .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; width: 95%; max-width: 320px; margin: 10px auto; }
         button.ctrl-btn { background: #333; color: white; border: none; padding: 12px; font-size: 18px; border-radius: 10px; border-bottom: 3px solid #111; touch-action: manipulation; }
         .boost-btn { grid-column: span 3; background: #ff9800 !important; padding: 10px !important; }
-        
-        /* BGMスイッチ */
         .switch { position: relative; display: inline-block; width: 34px; height: 18px; }
         .switch input { opacity: 0; width: 0; height: 0; }
         .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #555; transition: .4s; border-radius: 18px; }
         .slider:before { position: absolute; content: ""; height: 12px; width: 12px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
         input:checked + .slider { background-color: #f44336; }
         input:checked + .slider:before { transform: translateX(16px); }
-        #youtube-player { position: absolute; top: -999px; left: -999px; }
+        #youtube-player { position: absolute; top: -999px; left: -999px; pointer-events: none; }
     </style>
 </head>
 <body>
@@ -70,6 +37,7 @@
             <h2 style="margin-top:0">Tetris Battle</h2>
             <input type="text" id="room-input" placeholder="Room ID" maxlength="10">
             <button id="start-button">バトル開始！</button>
+            <p id="audio-hint" style="font-size:10px; color:#aaa; margin-top:10px;">※開始時に音が出ます</p>
         </div>
     </div>
 
@@ -78,7 +46,7 @@
         <div style="display:flex; align-items:center; gap:5px;">
             <span>BGM 🎵</span>
             <label class="switch">
-                <input type="checkbox" id="music-toggle">
+                <input type="checkbox" id="music-toggle" onchange="handleToggle()">
                 <span class="slider"></span>
             </label>
         </div>
@@ -122,46 +90,72 @@
         let socket, roomId, myId, isStarted = false, isFinished = false, isBoosting = false;
         let player, apiReady = false;
 
-        const localCanvas = document.getElementById('localCanvas');
-        const remoteCanvas = document.getElementById('remoteCanvas');
-        localCanvas.width = remoteCanvas.width = COLS * BLOCK_SIZE;
-        localCanvas.height = remoteCanvas.height = ROWS * BLOCK_SIZE;
-
-        const localCtx = localCanvas.getContext('2d');
-        const remoteCtx = remoteCanvas.getContext('2d');
-        const nextContexts = [
-            document.getElementById('next0').getContext('2d'), 
-            document.getElementById('next1').getContext('2d'), 
-            document.getElementById('next2').getContext('2d')
-        ];
-
-        const COLORS = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF', '#777777'];
-        const SHAPES = [null, [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]]];
-
-        let board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
-        let piece = null, nextQueue = [], remoteBoard = Array.from({length: ROWS}, () => Array(COLS).fill(0)), remotePiece = null, pendingAttack = 0;
-
+        // --- 音響強化ロジック ---
         function onYouTubeIframeAPIReady() {
             player = new YT.Player('youtube-player', {
                 height: '0', width: '0', videoId: VIDEO_ID,
-                playerVars: { 'autoplay': 0, 'loop': 1, 'playlist': VIDEO_ID },
-                events: { 'onReady': () => { apiReady = true; }}
+                playerVars: { 
+                    'autoplay': 0, 
+                    'loop': 1, 
+                    'playlist': VIDEO_ID, // ループにはこれが必要
+                    'controls': 0,
+                    'disablekb': 1
+                },
+                events: { 
+                    'onReady': (event) => { 
+                        apiReady = true; 
+                        event.target.setVolume(80); // 音量を80%にセット
+                    },
+                    'onStateChange': (event) => {
+                        // ループが途切れた場合の補完
+                        if (event.data === YT.PlayerState.ENDED) {
+                            player.playVideo();
+                        }
+                    }
+                }
             });
+        }
+
+        // スイッチが手動で切り替えられた時
+        function handleToggle() {
+            if (!apiReady) return;
+            if (document.getElementById('music-toggle').checked) {
+                player.playVideo();
+            } else {
+                player.pauseVideo();
+            }
         }
 
         document.getElementById('start-button').onclick = function() {
             roomId = document.getElementById('room-input').value.trim();
             if(!roomId) return;
-            if (apiReady && player.playVideo) { player.playVideo(); player.pauseVideo(); }
+            
+            // ★超重要: ユーザーがボタンを押したこの瞬間にのみ、ブラウザの音制限を解除できる
+            if (apiReady) {
+                player.playVideo();
+                // もしスイッチが最初OFFなら、即停止させて「許可」だけもらう
+                if (!document.getElementById('music-toggle').checked) {
+                    player.pauseVideo();
+                }
+            }
+            
             document.getElementById('start-overlay').style.display = 'none';
             document.getElementById('room-display').innerText = "R:" + roomId;
             connect();
         };
 
-        const boostBtn = document.getElementById('boost-button');
-        const setBoost = (v) => { isBoosting = v; };
-        boostBtn.onmousedown = boostBtn.ontouchstart = () => setBoost(true);
-        boostBtn.onmouseup = boostBtn.ontouchend = () => setBoost(false);
+        // --- 以下、ゲームロジック ---
+        const localCanvas = document.getElementById('localCanvas');
+        const remoteCanvas = document.getElementById('remoteCanvas');
+        localCanvas.width = remoteCanvas.width = COLS * BLOCK_SIZE;
+        localCanvas.height = remoteCanvas.height = ROWS * BLOCK_SIZE;
+        const localCtx = localCanvas.getContext('2d');
+        const remoteCtx = remoteCanvas.getContext('2d');
+        const nextContexts = [document.getElementById('next0').getContext('2d'), document.getElementById('next1').getContext('2d'), document.getElementById('next2').getContext('2d')];
+        const COLORS = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF', '#777777'];
+        const SHAPES = [null, [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]]];
+        let board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
+        let piece = null, nextQueue = [], remoteBoard = Array.from({length: ROWS}, () => Array(COLS).fill(0)), remotePiece = null, pendingAttack = 0;
 
         function connect() {
             socket = new WebSocket(SERVER_URL);
@@ -174,7 +168,10 @@
                     board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
                     nextQueue = Array.from({length:6}, () => Math.floor(Math.random()*7)+1);
                     spawnPiece();
-                    if(document.getElementById('music-toggle').checked && apiReady) player.playVideo();
+                    // 対戦開始時にスイッチがONなら再生
+                    if(document.getElementById('music-toggle').checked && apiReady) {
+                        player.playVideo();
+                    }
                 }
                 if (data.type === 'lose' && !isFinished) showResult(true);
                 if (data.type === 'gameData' && data.sender !== myId) { remoteBoard = data.board; remotePiece = data.piece; }
@@ -182,107 +179,23 @@
             };
         }
 
-        function spawnPiece() {
-            const id = nextQueue.shift();
-            nextQueue.push(Math.floor(Math.random()*7)+1);
-            piece = { id, matrix: SHAPES[id], x: 3, y: 0 };
-            if (collide(board, piece)) showResult(false);
-        }
-
-        function showResult(win) {
-            if (isFinished) return;
-            isFinished = true; isStarted = false;
-            if(apiReady) player.pauseVideo();
-            const s = document.getElementById('status');
-            s.innerText = win ? "WIN!" : "LOSE";
-            s.className = win ? "win-screen" : "lose-screen";
-            if(!win) socket.send(JSON.stringify({ type: 'lose', roomId }));
-        }
-
-        function drop() {
-            if (!isStarted || isFinished || !piece) return;
-            piece.y++;
-            if (collide(board, piece)) {
-                piece.y--;
-                piece.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v && board[y+piece.y]) board[y+piece.y][x+piece.x] = piece.id; }); });
-                let cleared = 0;
-                for (let y = ROWS-1; y>=0; y--) { if (board[y].every(cell => cell!==0)) { board.splice(y,1); board.unshift(Array(COLS).fill(0)); cleared++; y++; } }
-                if (cleared >= 2) socket.send(JSON.stringify({ type: 'attack', roomId, lines: cleared-1 }));
-                if (pendingAttack > 0) {
-                    for(let i=0; i<pendingAttack; i++){
-                        board.shift();
-                        board.push(Array(COLS).fill(8).map((v, idx) => idx === 4 ? 0 : 8));
-                    }
-                    pendingAttack = 0;
-                }
-                spawnPiece();
-            }
-            sync();
-        }
-
-        function collide(b, p) {
-            for(let y=0; y<p.matrix.length; y++) {
-                for(let x=0; x<p.matrix[y].length; x++) {
-                    if(p.matrix[y][x] && (!b[y+p.y] || b[y+p.y][x+p.x]!==0)) return true;
-                }
-            }
-            return false;
-        }
-
-        function handleInput(type) {
-            if (!isStarted || isFinished || !piece) return;
-            if (type === 'left') { piece.x--; if(collide(board, piece)) piece.x++; }
-            if (type === 'right') { piece.x++; if(collide(board, piece)) piece.x--; }
-            if (type === 'rotate') { 
-                const pre = piece.matrix; 
-                piece.matrix = piece.matrix[0].map((_, i) => piece.matrix.map(row => row[i]).reverse());
-                if(collide(board, piece)) piece.matrix = pre;
-            }
-            if (type === 'drop') { while(!collide(board, piece)) { piece.y++; } piece.y--; drop(); }
-            sync();
-        }
-
+        // (その他の関数 spawnPiece, showResult, drop, collide, handleInput, sync, drawBoard, drawNext, gameLoop は前回と同様)
+        function spawnPiece() { const id = nextQueue.shift(); nextQueue.push(Math.floor(Math.random()*7)+1); piece = { id, matrix: SHAPES[id], x: 3, y: 0 }; if (collide(board, piece)) showResult(false); }
+        function showResult(win) { if (isFinished) return; isFinished = true; isStarted = false; if(apiReady) player.pauseVideo(); const s = document.getElementById('status'); s.innerText = win ? "WIN!" : "LOSE"; s.className = win ? "win-screen" : "lose-screen"; if(!win) socket.send(JSON.stringify({ type: 'lose', roomId })); }
+        function drop() { if (!isStarted || isFinished || !piece) return; piece.y++; if (collide(board, piece)) { piece.y--; piece.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v && board[y+piece.y]) board[y+piece.y][x+piece.x] = piece.id; }); }); let cleared = 0; for (let y = ROWS-1; y>=0; y--) { if (board[y].every(cell => cell!==0)) { board.splice(y,1); board.unshift(Array(COLS).fill(0)); cleared++; y++; } } if (cleared >= 2) socket.send(JSON.stringify({ type: 'attack', roomId, lines: cleared-1 })); if (pendingAttack > 0) { for(let i=0; i<pendingAttack; i++){ board.shift(); board.push(Array(COLS).fill(8).map((v, idx) => idx === 4 ? 0 : 8)); } pendingAttack = 0; } spawnPiece(); } sync(); }
+        function collide(b, p) { for(let y=0; y<p.matrix.length; y++) { for(let x=0; x<p.matrix[y].length; x++) { if(p.matrix[y][x] && (!b[y+p.y] || b[y+p.y][x+p.x]!==0)) return true; } } return false; }
+        function handleInput(type) { if (!isStarted || isFinished || !piece) return; if (type === 'left') { piece.x--; if(collide(board, piece)) piece.x++; } if (type === 'right') { piece.x++; if(collide(board, piece)) piece.x--; } if (type === 'rotate') { const pre = piece.matrix; piece.matrix = piece.matrix[0].map((_, i) => piece.matrix.map(row => row[i]).reverse()); if(collide(board, piece)) piece.matrix = pre; } if (type === 'drop') { while(!collide(board, piece)) { piece.y++; } piece.y--; drop(); } sync(); }
         function sync() { if (socket?.readyState === WebSocket.OPEN && isStarted) socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece })); }
-
-        function drawBoard(ctx, b, p) {
-            ctx.fillStyle = '#000'; ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);
-            ctx.strokeStyle = '#222';
-            for(let i=0; i<=COLS; i++) { ctx.beginPath(); ctx.moveTo(i*BLOCK_SIZE, 0); ctx.lineTo(i*BLOCK_SIZE, ROWS*BLOCK_SIZE); ctx.stroke(); }
-            for(let i=0; i<=ROWS; i++) { ctx.beginPath(); ctx.moveTo(0, i*BLOCK_SIZE); ctx.lineTo(COLS*BLOCK_SIZE, i*BLOCK_SIZE); ctx.stroke(); }
-
-            b.forEach((row, y) => { row.forEach((v, x) => { if(v){ ctx.fillStyle = COLORS[v]; ctx.fillRect(x*BLOCK_SIZE+1, y*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); } }); });
-            if(p){ ctx.fillStyle = COLORS[p.id]; p.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect((p.x+x)*BLOCK_SIZE+1, (p.y+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); }); }); }
-        }
-
-        function drawNext() {
-            nextContexts.forEach((ctx, i) => {
-                ctx.fillStyle = '#000'; ctx.fillRect(0,0,30,30);
-                const id = nextQueue[i]; if(!id) return;
-                const m = SHAPES[id]; ctx.fillStyle = COLORS[id];
-                const s = 6;
-                m.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect(x*s+5, y*s+5, s-1, s-1); }); });
-            });
-        }
-
+        function drawBoard(ctx, b, p) { ctx.fillStyle = '#000'; ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height); ctx.strokeStyle = '#222'; for(let i=0; i<=COLS; i++) { ctx.beginPath(); ctx.moveTo(i*BLOCK_SIZE, 0); ctx.lineTo(i*BLOCK_SIZE, ROWS*BLOCK_SIZE); ctx.stroke(); } for(let i=0; i<=ROWS; i++) { ctx.beginPath(); ctx.moveTo(0, i*BLOCK_SIZE); ctx.lineTo(COLS*BLOCK_SIZE, i*BLOCK_SIZE); ctx.stroke(); } b.forEach((row, y) => { row.forEach((v, x) => { if(v){ ctx.fillStyle = COLORS[v]; ctx.fillRect(x*BLOCK_SIZE+1, y*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); } }); }); if(p){ ctx.fillStyle = COLORS[p.id]; p.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect((p.x+x)*BLOCK_SIZE+1, (p.y+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); }); }); } }
+        function drawNext() { nextContexts.forEach((ctx, i) => { ctx.fillStyle = '#000'; ctx.fillRect(0,0,30,30); const id = nextQueue[i]; if(!id) return; const m = SHAPES[id]; ctx.fillStyle = COLORS[id]; const s = 6; m.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect(x*s+5, y*s+5, s-1, s-1); }); }); }); }
+        
         let lastTime = 0, dropCounter = 0;
-        function gameLoop(time = 0) {
-            const dt = time - lastTime; lastTime = time;
-            if (isStarted && !isFinished) {
-                dropCounter += dt;
-                if (dropCounter > (isBoosting ? 50 : 800)) { drop(); dropCounter = 0; }
-            }
-            drawBoard(localCtx, board, piece);
-            drawBoard(remoteCtx, remoteBoard, remotePiece);
-            drawNext();
-            requestAnimationFrame(gameLoop);
-        }
+        function gameLoop(time = 0) { const dt = time - lastTime; lastTime = time; if (isStarted && !isFinished) { dropCounter += dt; if (dropCounter > (isBoosting ? 50 : 800)) { drop(); dropCounter = 0; } } drawBoard(localCtx, board, piece); drawBoard(remoteCtx, remoteBoard, remotePiece); drawNext(); requestAnimationFrame(gameLoop); }
         gameLoop();
 
-        function toggleMusicDirectly() {
-            if (!apiReady) return;
-            if (document.getElementById('music-toggle').checked && isStarted) player.playVideo();
-            else player.pauseVideo();
-        }
+        const boostBtn = document.getElementById('boost-button');
+        boostBtn.onmousedown = boostBtn.ontouchstart = () => isBoosting = true;
+        boostBtn.onmouseup = boostBtn.ontouchend = () => isBoosting = false;
     </script>
 </body>
 </html>
