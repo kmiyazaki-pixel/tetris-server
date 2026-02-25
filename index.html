@@ -3,14 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Tetris Online Battle - Final</title>
+    <title>Tetris Online Battle - Final Verdict</title>
     <style>
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
-        #status { background: #4caf50; padding: 8px; font-weight: bold; font-size: 14px; height: 20px; text-shadow: 1px 1px 2px black; }
-        .win-status { background: #ffc107 !important; color: black !important; font-size: 18px !important; }
+        #status { background: #4caf50; padding: 10px; font-weight: bold; font-size: 16px; height: 24px; box-shadow: 0 2px 10px rgba(0,0,0,0.5); z-index: 10; position: relative; }
+        /* 勝利時の特別なスタイル */
+        .win-screen { background: #ffc107 !important; color: #000 !important; font-size: 20px !important; }
+        /* 敗北時の特別なスタイル */
+        .lose-screen { background: #f44336 !important; color: #fff !important; }
+        
         .game-area { display: flex; justify-content: center; gap: 10px; margin-top: 15px; }
         .player-label { font-size: 12px; margin-bottom: 5px; color: #aaa; }
-        canvas { background: #000; border: 2px solid #444; width: 140px; height: 280px; box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        canvas { background: #000; border: 2px solid #444; width: 140px; height: 280px; }
+        
         .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 90%; max-width: 320px; margin: 20px auto; }
         button { background: #333; color: white; border: none; padding: 20px; font-size: 20px; border-radius: 12px; touch-action: manipulation; border-bottom: 4px solid #111; }
         button:active { border-bottom: 0; transform: translateY(4px); }
@@ -21,8 +26,8 @@
 <body>
     <div id="status">サーバー接続中...</div>
     <div class="game-area">
-        <div><div class="player-label">YOU</div><canvas id="localCanvas"></canvas></div>
-        <div><div class="player-label">RIVAL</div><canvas id="remoteCanvas"></canvas></div>
+        <div><div class="player-label">YOU (自分)</div><canvas id="localCanvas"></canvas></div>
+        <div><div class="player-label">RIVAL (相手)</div><canvas id="remoteCanvas"></canvas></div>
     </div>
     <div class="controls">
         <button onclick="handleInput('left')">←</button>
@@ -34,7 +39,7 @@
     <script>
         const SERVER_URL = 'wss://tetris-server-7w6p.onrender.com';
         const COLS = 10, ROWS = 20, BLOCK_SIZE = 20;
-        let socket, roomId, myId, isStarted = false, isGameOver = false;
+        let socket, roomId, myId, isStarted = false, isFinished = false;
         
         const localCtx = document.getElementById('localCanvas').getContext('2d');
         const remoteCtx = document.getElementById('remoteCanvas').getContext('2d');
@@ -57,27 +62,44 @@
             };
             socket.onmessage = (e) => {
                 const data = JSON.parse(e.data);
+                
                 if (data.type === 'start') {
-                    isStarted = true; isGameOver = false; myId = data.userId;
-                    document.getElementById('status').innerText = "対戦中！";
-                    document.getElementById('status').classList.remove('win-status');
+                    isStarted = true; isFinished = false; myId = data.userId;
+                    const s = document.getElementById('status');
+                    s.innerText = "対戦中！";
+                    s.className = ""; // スタイルリセット
                     if(!piece) { piece = createPiece(); requestAnimationFrame(gameLoop); }
                 }
+                
                 if (data.type === 'gameData' && data.sender !== myId) {
                     remoteBoard = data.board; remotePiece = data.piece;
                 }
-                if (data.type === 'attack') {
+                
+                if (data.type === 'attack' && !isFinished) {
                     pendingAttack += data.lines;
                     document.getElementById('status').innerText = "⚠️ 攻撃警告: " + pendingAttack + "行";
                 }
-                // ★勝利判定の受信
+
+                // ★相手が負けた通知を受け取った ＝ 自分の勝ち
                 if (data.type === 'lose' && data.sender !== myId) {
-                    isStarted = false;
-                    const s = document.getElementById('status');
-                    s.innerText = "✨ あなたは勝ちました！ ✨";
-                    s.classList.add('win-status');
+                    finishGame(true);
                 }
             };
+        }
+
+        function finishGame(win) {
+            isStarted = false;
+            isFinished = true;
+            const s = document.getElementById('status');
+            if (win) {
+                s.innerText = "✨ あなたの勝ちです！終了 ✨";
+                s.className = "win-screen";
+            } else {
+                s.innerText = "あなたは負けました...";
+                s.className = "lose-screen";
+                // 自分が負けたことを相手に伝える
+                socket.send(JSON.stringify({ type: 'lose', roomId, sender: myId }));
+            }
         }
 
         function sync() {
@@ -102,21 +124,21 @@
         }
 
         function handleInput(type) {
-            if (!isStarted || isGameOver) return;
+            if (!isStarted || isFinished) return;
             if (type === 'left') { piece.x--; if(collide(board, piece)) piece.x++; }
             if (type === 'right') { piece.x++; if(collide(board, piece)) piece.x--; }
             if (type === 'rotate') { 
-                const pre = piece.matrix; piece.matrix = rotate(piece.matrix); 
+                const pre = piece.matrix; piece.matrix = matrixRotate(piece.matrix); 
                 if(collide(board, piece)) piece.matrix = pre; 
             }
             if (type === 'drop') { while(!collide(board, piece)) { piece.y++; } piece.y--; drop(); }
             sync();
         }
 
-        function rotate(matrix) { return matrix[0].map((_, i) => matrix.map(row => row[i]).reverse()); }
+        function matrixRotate(matrix) { return matrix[0].map((_, i) => matrix.map(row => row[i]).reverse()); }
 
         function drop() {
-            if (!isStarted || isGameOver) return;
+            if (!isStarted || isFinished) return;
             piece.y++;
             if (collide(board, piece)) {
                 piece.y--;
@@ -145,40 +167,36 @@
 
                 piece = createPiece();
                 if (collide(board, piece)) { 
-                    isStarted = false; isGameOver = true;
-                    document.getElementById('status').innerText = "あなたは負けました...";
-                    // ★自分が負けたことを相手に通知
-                    socket.send(JSON.stringify({ type: 'lose', roomId, sender: myId }));
+                    finishGame(false); // 自分が負けた
                 }
             }
             sync();
         }
 
         function drawBoard(ctx, b, p) {
-            // 背景
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
-            // ★グリッド線の描画
+            // グリッド線
             ctx.strokeStyle = '#222';
             ctx.lineWidth = 1;
             for(let x=0; x<=COLS*BLOCK_SIZE; x+=BLOCK_SIZE) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,ROWS*BLOCK_SIZE); ctx.stroke(); }
             for(let y=0; y<=ROWS*BLOCK_SIZE; y+=BLOCK_SIZE) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(COLS*BLOCK_SIZE,y); ctx.stroke(); }
             
-            // ブロック
+            // 固定ブロック
             b.forEach((row, y) => { row.forEach((v, x) => { if(v) { 
                 ctx.fillStyle = COLORS[v]; 
                 ctx.fillRect(x*BLOCK_SIZE+1, y*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); 
             } }); });
             
-            // 現在のピース
+            // 動いているブロック
             if(p) { ctx.fillStyle = COLORS[p.id]; p.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect((p.x+x)*BLOCK_SIZE+1, (p.y+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); }); }); }
         }
 
         let lastTime = 0, dropCounter = 0, syncCounter = 0;
         function gameLoop(time = 0) {
             const dt = time - lastTime; lastTime = time;
-            if (isStarted) {
+            if (isStarted && !isFinished) {
                 dropCounter += dt;
                 syncCounter += dt;
                 if (dropCounter > 1000) { drop(); dropCounter = 0; }
