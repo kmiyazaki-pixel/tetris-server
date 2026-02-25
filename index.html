@@ -3,19 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Tetris Online Battle - Final Verdict</title>
+    <title>Tetris Online - Final Battle</title>
     <style>
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
-        #status { background: #4caf50; padding: 10px; font-weight: bold; font-size: 16px; height: 24px; box-shadow: 0 2px 10px rgba(0,0,0,0.5); z-index: 10; position: relative; }
-        /* 勝利時の特別なスタイル */
-        .win-screen { background: #ffc107 !important; color: #000 !important; font-size: 20px !important; }
-        /* 敗北時の特別なスタイル */
+        #status { background: #4caf50; padding: 10px; font-weight: bold; font-size: 16px; min-height: 24px; box-shadow: 0 2px 10px rgba(0,0,0,0.5); position: relative; z-index: 100; }
+        .win-screen { background: #ffc107 !important; color: #000 !important; font-size: 22px !important; }
         .lose-screen { background: #f44336 !important; color: #fff !important; }
-        
         .game-area { display: flex; justify-content: center; gap: 10px; margin-top: 15px; }
         .player-label { font-size: 12px; margin-bottom: 5px; color: #aaa; }
         canvas { background: #000; border: 2px solid #444; width: 140px; height: 280px; }
-        
         .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 90%; max-width: 320px; margin: 20px auto; }
         button { background: #333; color: white; border: none; padding: 20px; font-size: 20px; border-radius: 12px; touch-action: manipulation; border-bottom: 4px solid #111; }
         button:active { border-bottom: 0; transform: translateY(4px); }
@@ -26,8 +22,8 @@
 <body>
     <div id="status">サーバー接続中...</div>
     <div class="game-area">
-        <div><div class="player-label">YOU (自分)</div><canvas id="localCanvas"></canvas></div>
-        <div><div class="player-label">RIVAL (相手)</div><canvas id="remoteCanvas"></canvas></div>
+        <div><div class="player-label">YOU</div><canvas id="localCanvas"></canvas></div>
+        <div><div class="player-label">RIVAL</div><canvas id="remoteCanvas"></canvas></div>
     </div>
     <div class="controls">
         <button onclick="handleInput('left')">←</button>
@@ -63,33 +59,43 @@
             socket.onmessage = (e) => {
                 const data = JSON.parse(e.data);
                 
+                // 1. ゲーム開始
                 if (data.type === 'start') {
                     isStarted = true; isFinished = false; myId = data.userId;
                     const s = document.getElementById('status');
-                    s.innerText = "対戦中！";
-                    s.className = ""; // スタイルリセット
-                    if(!piece) { piece = createPiece(); requestAnimationFrame(gameLoop); }
+                    s.innerText = "対戦中！"; s.className = "";
+                    board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
+                    piece = createPiece();
+                    requestAnimationFrame(gameLoop);
                 }
                 
-                if (data.type === 'gameData' && data.sender !== myId) {
+                // 2. 相手が負けた通知を受け取った（＝自分の勝ち）
+                if (data.type === 'lose') {
+                    // 送信者が自分ではない場合、自分の勝ちとして終了
+                    if (data.sender !== myId) {
+                        finishGame(true);
+                    }
+                }
+                
+                // 3. 相手の盤面データ受信
+                if (data.type === 'gameData' && data.sender !== myId && !isFinished) {
                     remoteBoard = data.board; remotePiece = data.piece;
                 }
                 
+                // 4. 攻撃受信
                 if (data.type === 'attack' && !isFinished) {
                     pendingAttack += data.lines;
                     document.getElementById('status').innerText = "⚠️ 攻撃警告: " + pendingAttack + "行";
                 }
-
-                // ★相手が負けた通知を受け取った ＝ 自分の勝ち
-                if (data.type === 'lose' && data.sender !== myId) {
-                    finishGame(true);
-                }
             };
         }
 
+        // ゲーム終了処理
         function finishGame(win) {
-            isStarted = false;
+            if (isFinished) return; // 二重処理防止
             isFinished = true;
+            isStarted = false;
+            
             const s = document.getElementById('status');
             if (win) {
                 s.innerText = "✨ あなたの勝ちです！終了 ✨";
@@ -97,13 +103,13 @@
             } else {
                 s.innerText = "あなたは負けました...";
                 s.className = "lose-screen";
-                // 自分が負けたことを相手に伝える
+                // 自分が負けたことをサーバー経由で相手に送る
                 socket.send(JSON.stringify({ type: 'lose', roomId, sender: myId }));
             }
         }
 
         function sync() {
-            if (socket && socket.readyState === WebSocket.OPEN && isStarted) {
+            if (socket && socket.readyState === WebSocket.OPEN && isStarted && !isFinished) {
                 socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece }));
             }
         }
@@ -167,7 +173,7 @@
 
                 piece = createPiece();
                 if (collide(board, piece)) { 
-                    finishGame(false); // 自分が負けた
+                    finishGame(false); // 負け判定
                 }
             }
             sync();
@@ -176,20 +182,13 @@
         function drawBoard(ctx, b, p) {
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-
-            // グリッド線
             ctx.strokeStyle = '#222';
-            ctx.lineWidth = 1;
             for(let x=0; x<=COLS*BLOCK_SIZE; x+=BLOCK_SIZE) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,ROWS*BLOCK_SIZE); ctx.stroke(); }
             for(let y=0; y<=ROWS*BLOCK_SIZE; y+=BLOCK_SIZE) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(COLS*BLOCK_SIZE,y); ctx.stroke(); }
-            
-            // 固定ブロック
             b.forEach((row, y) => { row.forEach((v, x) => { if(v) { 
                 ctx.fillStyle = COLORS[v]; 
                 ctx.fillRect(x*BLOCK_SIZE+1, y*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); 
             } }); });
-            
-            // 動いているブロック
             if(p) { ctx.fillStyle = COLORS[p.id]; p.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect((p.x+x)*BLOCK_SIZE+1, (p.y+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); }); }); }
         }
 
