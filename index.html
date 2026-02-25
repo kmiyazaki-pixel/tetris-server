@@ -17,7 +17,6 @@
             background: #333; padding: 40px 30px; border-radius: 24px; 
             box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 80%; max-width: 300px;
         }
-        h1 { margin: 0 0 20px 0; font-size: 28px; }
         input[type="text"] {
             width: 100%; padding: 15px; font-size: 20px; border-radius: 10px;
             border: 2px solid #444; margin-bottom: 20px; text-align: center; box-sizing: border-box;
@@ -27,15 +26,44 @@
             width: 100%; padding: 15px; font-size: 20px; background: #2196f3; color: white;
             border: none; border-radius: 10px; cursor: pointer; border-bottom: 5px solid #0d47a1;
         }
-        #start-button:active { border-bottom: 0; transform: translateY(5px); }
 
-        /* ゲーム画面レイアウト */
+        /* ゲーム画面レイアウト：横並びに修正 */
         #status { background: #4caf50; padding: 10px; font-weight: bold; font-size: 18px; min-height: 24px; }
         .win-screen { background: #ffc107 !important; color: #000 !important; }
         .lose-screen { background: #f44336 !important; color: #fff !important; }
         
         .top-controls { display: flex; justify-content: space-around; align-items: center; background: #222; padding: 8px; font-size: 14px; border-bottom: 1px solid #444; }
-        .music-toggle-container { display: flex; align-items: center; gap: 8px; }
+        
+        .main-layout { 
+            display: flex; 
+            justify-content: center; 
+            align-items: flex-start; 
+            gap: 20px; /* プレイヤー間の隙間 */
+            margin-top: 15px;
+            padding: 0 10px;
+        }
+
+        .player-block { display: flex; flex-direction: column; align-items: center; }
+        .player-label { font-size: 14px; font-weight: bold; margin-bottom: 5px; color: #aaa; }
+
+        .next-container { 
+            display: flex; flex-direction: column; gap: 8px; 
+            border: 2px solid #555; background: #000; padding: 10px; border-radius: 8px;
+            margin-right: 10px;
+        }
+        .next-canvas { background: #000; width: 50px; height: 50px; }
+        
+        /* キャンバスのサイズ固定（ブロックが歪まないように） */
+        canvas.game-canvas { 
+            background: #000; 
+            border: 3px solid #444; 
+            width: 200px; /* 表示上の幅 */
+            height: 400px; /* 表示上の高さ */
+        }
+
+        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 95%; max-width: 400px; margin: 15px auto; }
+        button.ctrl-btn { background: #333; color: white; border: none; padding: 15px; font-size: 18px; border-radius: 12px; border-bottom: 4px solid #111; touch-action: manipulation; }
+        .boost-btn { grid-column: span 3; background: #ff9800 !important; }
         
         /* BGMスイッチ */
         .switch { position: relative; display: inline-block; width: 44px; height: 22px; }
@@ -44,16 +72,6 @@
         .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
         input:checked + .slider { background-color: #f44336; }
         input:checked + .slider:before { transform: translateX(22px); }
-
-        .main-layout { display: flex; justify-content: center; align-items: flex-start; gap: 10px; margin-top: 10px; }
-        .next-container { display: flex; flex-direction: column; gap: 8px; border: 2px solid #555; background: #000; padding: 10px; border-radius: 8px; }
-        .next-canvas { background: #000; width: 40px; height: 40px; }
-        canvas { background: #000; border: 2px solid #444; width: 140px; height: 280px; }
-
-        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 95%; max-width: 340px; margin: 15px auto; }
-        button.ctrl-btn { background: #333; color: white; border: none; padding: 18px; font-size: 20px; border-radius: 12px; border-bottom: 4px solid #111; touch-action: manipulation; }
-        .boost-btn { grid-column: span 3; background: #ff9800 !important; margin-top: -5px; }
-        
         #youtube-player { position: absolute; top: -999px; left: -999px; }
     </style>
 </head>
@@ -63,13 +81,12 @@
             <h1>Tetris Battle</h1>
             <input type="text" id="room-input" placeholder="Room ID" maxlength="10">
             <button id="start-button">バトル開始！</button>
-            <div id="loading-msg" style="font-size:10px; color:#666; margin-top:10px;">Music API Ready</div>
         </div>
     </div>
 
     <div class="top-controls">
         <div id="room-display">ROOM: ----</div>
-        <div class="music-toggle-container">
+        <div style="display:flex; align-items:center; gap:8px;">
             <span>BGM 🎵</span>
             <label class="switch">
                 <input type="checkbox" id="music-toggle">
@@ -78,18 +95,24 @@
         </div>
     </div>
 
-    <div id="status">IDを入力してください</div>
+    <div id="status">対戦相手を待っています</div>
     
     <div class="main-layout">
         <div class="next-container">
             <div style="font-size:10px; color:#aaa">NEXT</div>
-            <canvas id="next0" class="next-canvas" width="40" height="40"></canvas>
-            <canvas id="next1" class="next-canvas" width="40" height="40"></canvas>
-            <canvas id="next2" class="next-canvas" width="40" height="40"></canvas>
+            <canvas id="next0" class="next-canvas" width="50" height="50"></canvas>
+            <canvas id="next1" class="next-canvas" width="50" height="50"></canvas>
+            <canvas id="next2" class="next-canvas" width="50" height="50"></canvas>
         </div>
-        <div class="game-area">
-            <div><div style="font-size:10px">YOU</div><canvas id="localCanvas"></canvas></div>
-            <div><div style="font-size:10px">RIVAL</div><canvas id="remoteCanvas"></canvas></div>
+
+        <div class="player-block">
+            <div class="player-label">YOU</div>
+            <canvas id="localCanvas" class="game-canvas"></canvas>
+        </div>
+
+        <div class="player-block">
+            <div class="player-label">RIVAL</div>
+            <canvas id="remoteCanvas" class="game-canvas"></canvas>
         </div>
     </div>
 
@@ -107,22 +130,23 @@
     <script>
         const SERVER_URL = 'wss://tetris-server-7w6p.onrender.com';
         const VIDEO_ID = 'Doq1NWO6AtI'; 
-        const COLS = 10, ROWS = 20, BLOCK_SIZE = 20;
-        
+        const COLS = 10, ROWS = 20, BLOCK_SIZE = 25; // 描画時の1マスのサイズ
+
         let socket, roomId, myId, isStarted = false, isFinished = false, isBoosting = false;
         let player, apiReady = false;
 
-        const localCtx = document.getElementById('localCanvas').getContext('2d');
-        const remoteCtx = document.getElementById('remoteCanvas').getContext('2d');
+        const localCanvas = document.getElementById('localCanvas');
+        const remoteCanvas = document.getElementById('remoteCanvas');
+        localCanvas.width = remoteCanvas.width = COLS * BLOCK_SIZE;
+        localCanvas.height = remoteCanvas.height = ROWS * BLOCK_SIZE;
+
+        const localCtx = localCanvas.getContext('2d');
+        const remoteCtx = remoteCanvas.getContext('2d');
         const nextContexts = [
             document.getElementById('next0').getContext('2d'), 
             document.getElementById('next1').getContext('2d'), 
             document.getElementById('next2').getContext('2d')
         ];
-
-        document.querySelectorAll('canvas').forEach(c => {
-            if(!c.classList.contains('next-canvas')){ c.width = COLS*BLOCK_SIZE; c.height = ROWS*BLOCK_SIZE; }
-        });
 
         const COLORS = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF', '#777777'];
         const SHAPES = [null, [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]]];
@@ -130,7 +154,6 @@
         let board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
         let piece = null, nextQueue = [], remoteBoard = Array.from({length: ROWS}, () => Array(COLS).fill(0)), remotePiece = null, pendingAttack = 0;
 
-        // YouTube API
         function onYouTubeIframeAPIReady() {
             player = new YT.Player('youtube-player', {
                 height: '0', width: '0', videoId: VIDEO_ID,
@@ -139,7 +162,6 @@
             });
         }
 
-        // スタートボタン設定
         document.getElementById('start-button').onclick = function() {
             roomId = document.getElementById('room-input').value.trim();
             if(!roomId) return;
@@ -149,20 +171,14 @@
             connect();
         };
 
-        // 加速ボタン設定
         const boostBtn = document.getElementById('boost-button');
         const setBoost = (v) => { isBoosting = v; };
-        boostBtn.ontouchstart = () => setBoost(true);
-        boostBtn.ontouchend = () => setBoost(false);
-        boostBtn.onmousedown = () => setBoost(true);
-        boostBtn.onmouseup = () => setBoost(false);
+        boostBtn.onmousedown = boostBtn.ontouchstart = () => setBoost(true);
+        boostBtn.onmouseup = boostBtn.ontouchend = () => setBoost(false);
 
         function connect() {
             socket = new WebSocket(SERVER_URL);
-            socket.onopen = () => { 
-                document.getElementById('status').innerText = "相手を待っています...";
-                socket.send(JSON.stringify({ type: 'join', roomId })); 
-            };
+            socket.onopen = () => { socket.send(JSON.stringify({ type: 'join', roomId })); };
             socket.onmessage = (e) => {
                 const data = JSON.parse(e.data);
                 if (data.type === 'start') {
@@ -208,9 +224,7 @@
                 if (pendingAttack > 0) {
                     for(let i=0; i<pendingAttack; i++){
                         board.shift();
-                        let r = Array(COLS).fill(8);
-                        r[Math.floor(Math.random()*COLS)] = 0;
-                        board.push(r);
+                        board.push(Array(COLS).fill(8).map((v, idx) => idx === Math.floor(COLS/2) ? 0 : 8));
                     }
                     pendingAttack = 0;
                 }
@@ -245,17 +259,22 @@
 
         function drawBoard(ctx, b, p) {
             ctx.fillStyle = '#000'; ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);
+            // グリッド線
+            ctx.strokeStyle = '#222';
+            for(let i=0; i<=COLS; i++) { ctx.beginPath(); ctx.moveTo(i*BLOCK_SIZE, 0); ctx.lineTo(i*BLOCK_SIZE, ROWS*BLOCK_SIZE); ctx.stroke(); }
+            for(let i=0; i<=ROWS; i++) { ctx.beginPath(); ctx.moveTo(0, i*BLOCK_SIZE); ctx.lineTo(COLS*BLOCK_SIZE, i*BLOCK_SIZE); ctx.stroke(); }
+
             b.forEach((row, y) => { row.forEach((v, x) => { if(v){ ctx.fillStyle = COLORS[v]; ctx.fillRect(x*BLOCK_SIZE+1, y*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); } }); });
             if(p){ ctx.fillStyle = COLORS[p.id]; p.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect((p.x+x)*BLOCK_SIZE+1, (p.y+y)*BLOCK_SIZE+1, BLOCK_SIZE-2, BLOCK_SIZE-2); }); }); }
         }
 
         function drawNext() {
             nextContexts.forEach((ctx, i) => {
-                ctx.fillStyle = '#000'; ctx.fillRect(0,0,40,40);
+                ctx.fillStyle = '#000'; ctx.fillRect(0,0,50,50);
                 const id = nextQueue[i]; if(!id) return;
                 const m = SHAPES[id]; ctx.fillStyle = COLORS[id];
-                const s = 8; const offset = (40 - m[0].length * s) / 2;
-                m.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect(x*s+offset, y*s+10, s-1, s-1); }); });
+                const s = 10;
+                m.forEach((row, y) => { row.forEach((v, x) => { if(v) ctx.fillRect(x*s+10, y*s+10, s-2, s-2); }); });
             });
         }
 
@@ -264,17 +283,15 @@
             const dt = time - lastTime; lastTime = time;
             if (isStarted && !isFinished) {
                 dropCounter += dt;
-                if (dropCounter > (isBoosting ? 50 : 1000)) { drop(); dropCounter = 0; }
+                if (dropCounter > (isBoosting ? 50 : 800)) { drop(); dropCounter = 0; }
             }
             drawBoard(localCtx, board, piece);
             drawBoard(remoteCtx, remoteBoard, remotePiece);
             drawNext();
             requestAnimationFrame(gameLoop);
         }
-        
-        // ★重要：描画ループは最初から回しておく
         gameLoop();
-        
+
         function toggleMusicDirectly() {
             if (!apiReady) return;
             if (document.getElementById('music-toggle').checked && isStarted) player.playVideo();
