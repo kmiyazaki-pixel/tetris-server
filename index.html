@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>テトリス・インフェルノ - 極・完全版</title>
     <style>
-        /* 青い選択を完全に封印 */
+        /* 青い選択を完全に封印（スマホ用） */
         * {
             -webkit-user-select: none !important;
             user-select: none !important;
@@ -85,10 +85,10 @@
     </div>
 
     <div class="controls">
-        <button class="ctrl-btn" ontouchstart="handleInput('left', event)">←</button>
-        <button class="ctrl-btn" style="background:#2196f3" ontouchstart="handleInput('rotate', event)">回</button>
-        <button class="ctrl-btn" ontouchstart="handleInput('right', event)">→</button>
-        <button class="ctrl-btn" style="grid-column:span 3; background:#f44336;" ontouchstart="handleInput('drop', event)">一気に落とす</button>
+        <button class="ctrl-btn" onmousedown="handleInput('left')" ontouchstart="handleInput('left', event)">←</button>
+        <button class="ctrl-btn" style="background:#2196f3" onmousedown="handleInput('rotate')" ontouchstart="handleInput('rotate', event)">回</button>
+        <button class="ctrl-btn" onmousedown="handleInput('right')" ontouchstart="handleInput('right', event)">→</button>
+        <button class="ctrl-btn" style="grid-column:span 3; background:#f44336;" onmousedown="handleInput('drop')" ontouchstart="handleInput('drop', event)">一気に落とす</button>
         <button class="ctrl-btn" id="boost-btn" style="grid-column:span 3; background:#ff9800; font-size:16px;">長押しで加速</button>
     </div>
 
@@ -108,6 +108,19 @@
         localCanvas.width = remoteCanvas.width = COLS * BLOCK_SIZE;
         localCanvas.height = remoteCanvas.height = ROWS * BLOCK_SIZE;
         const localCtx = localCanvas.getContext('2d'), remoteCtx = remoteCanvas.getContext('2d'), nextCtx = nextCanvas.getContext('2d');
+
+        // キーボード操作の追加
+        document.addEventListener('keydown', e => {
+            if (!isStarted || isFinished) return;
+            if (e.key === 'ArrowLeft') handleInput('left');
+            if (e.key === 'ArrowRight') handleInput('right');
+            if (e.key === 'ArrowUp') handleInput('rotate');
+            if (e.key === 'ArrowDown') isBoosting = true;
+            if (e.key === ' ') handleInput('drop');
+        });
+        document.addEventListener('keyup', e => {
+            if (e.key === 'ArrowDown') isBoosting = false;
+        });
 
         function spawnPiece() {
             if (nextQueue.length < 5) for(let i=0; i<7; i++) nextQueue.push(Math.floor(Math.random()*7)+1);
@@ -263,9 +276,14 @@
         }
 
         const bBtn=document.getElementById('boost-btn');
+        // スマホ用
         bBtn.addEventListener('touchstart', (e) => { e.preventDefault(); isBoosting = true; }, {passive: false});
         bBtn.addEventListener('touchend', (e) => { e.preventDefault(); isBoosting = false; }, {passive: false});
+        // PCマウスクリック用
+        bBtn.addEventListener('mousedown', () => { isBoosting = true; });
+        bBtn.addEventListener('mouseup', () => { isBoosting = false; });
         
+        let lastTime=0, dropCounter=0;
         function gameLoop(time=0){
             const dt=time-lastTime; lastTime=time;
             if(isStarted && !isFinished){
@@ -283,7 +301,6 @@
             }
             requestAnimationFrame(gameLoop);
         }
-        let lastTime=0, dropCounter=0;
         gameLoop();
     </script>
 </body>
