@@ -3,52 +3,67 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Tetris Battle - YouTube BGM Edition</title>
+    <title>Tetris Battle - Stable BGM</title>
     <style>
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; overflow: hidden; }
-        #status { background: #4caf50; padding: 10px; font-weight: bold; font-size: 18px; min-height: 24px; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+        #status { background: #4caf50; padding: 10px; font-weight: bold; font-size: 18px; min-height: 24px; }
         .win-screen { background: #ffc107 !important; color: #000 !important; font-size: 24px !important; }
         .lose-screen { background: #f44336 !important; color: #fff !important; font-size: 24px !important; }
         
-        /* スタート画面 */
+        /* スタート画面の改良 */
         #start-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.9); display: flex; flex-direction: column;
+            background: rgba(0,0,0,0.95); display: flex; flex-direction: column;
             justify-content: center; align-items: center; z-index: 100;
         }
+        .start-box { background: #333; padding: 30px; border-radius: 20px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        
         #start-button {
-            padding: 25px 50px; font-size: 24px; background: #2196f3; color: white;
+            padding: 20px 40px; font-size: 22px; background: #2196f3; color: white;
             border: none; border-radius: 50px; cursor: pointer; border-bottom: 5px solid #0d47a1;
+            margin-top: 20px; opacity: 0.5; pointer-events: none; /* API準備中 */
         }
+        #start-button.ready { opacity: 1; pointer-events: auto; }
+
+        /* 音楽設定スイッチ */
+        .music-setting { margin: 20px 0; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 18px; }
+        .switch { position: relative; display: inline-block; width: 60px; height: 34px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #f44336; }
+        input:checked + .slider:before { transform: translateX(26px); }
 
         .main-layout { display: flex; justify-content: center; align-items: flex-start; gap: 10px; margin-top: 10px; }
         .next-container { display: flex; flex-direction: column; gap: 8px; border: 2px solid #555; background: #000; padding: 10px; border-radius: 8px; }
-        .next-label { font-size: 10px; color: #aaa; }
-        .next-canvas { background: #000; width: 40px; height: 40px; border-bottom: 1px solid #222; }
-
-        .game-area { display: flex; gap: 10px; }
+        .next-canvas { background: #000; width: 40px; height: 40px; }
         canvas { background: #000; border: 2px solid #444; width: 140px; height: 280px; }
-
         .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 95%; max-width: 340px; margin: 15px auto; }
         button { background: #333; color: white; border: none; padding: 18px; font-size: 20px; border-radius: 12px; border-bottom: 4px solid #111; touch-action: manipulation; }
         .boost-btn { grid-column: span 3; background: #ff9800 !important; margin-top: -5px; }
-
-        /* YouTubeプレイヤーを隠す */
-        #youtube-player { position: absolute; top: -999px; left: -999px; pointer-events: none; }
+        #youtube-player { position: absolute; top: -999px; left: -999px; }
     </style>
 </head>
 <body>
     <div id="start-overlay">
-        <h1 style="margin-bottom: 10px;">Tetris Battle</h1>
-        <p style="color: #aaa; margin-bottom: 30px;">BGM: Tetris Theme (YouTube)</p>
-        <button id="start-button" onclick="initGame()">対戦を開始する</button>
+        <div class="start-box">
+            <h1 style="margin: 0 0 10px 0;">Tetris Battle</h1>
+            <div class="music-setting">
+                <span>BGMを流す</span>
+                <label class="switch">
+                    <input type="checkbox" id="music-toggle" checked>
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <button id="start-button" onclick="initGame()">ロード中...</button>
+        </div>
     </div>
 
     <div id="status">対戦待ち</div>
     
     <div class="main-layout">
         <div class="next-container">
-            <div class="next-label">NEXT</div>
+            <div style="font-size:10px; color:#aaa">NEXT</div>
             <canvas id="next0" class="next-canvas" width="40" height="40"></canvas>
             <canvas id="next1" class="next-canvas" width="40" height="40"></canvas>
             <canvas id="next2" class="next-canvas" width="40" height="40"></canvas>
@@ -72,14 +87,14 @@
     <script src="https://www.youtube.com/iframe_api"></script>
     <script>
         const SERVER_URL = 'wss://tetris-server-7w6p.onrender.com';
+        const VIDEO_ID = 'Doq1NWO6AtI'; // 新しい指定の動画ID
         const COLS = 10, ROWS = 20, BLOCK_SIZE = 20;
         let socket, roomId, myId, isStarted = false, isFinished = false, isBoosting = false;
-        let player; // YouTube Player instance
+        let player, apiReady = false;
 
         const localCtx = document.getElementById('localCanvas').getContext('2d');
         const remoteCtx = document.getElementById('remoteCanvas').getContext('2d');
         const nextContexts = [document.getElementById('next0').getContext('2d'), document.getElementById('next1').getContext('2d'), document.getElementById('next2').getContext('2d')];
-
         document.querySelectorAll('canvas').forEach(c => { if(c.className !== 'next-canvas'){ c.width = COLS*BLOCK_SIZE; c.height = ROWS*BLOCK_SIZE; } });
 
         let board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
@@ -90,23 +105,35 @@
         // YouTube API準備
         function onYouTubeIframeAPIReady() {
             player = new YT.Player('youtube-player', {
-                height: '0', width: '0',
-                videoId: '-WRUrN5uH48', // 社長指定の動画ID
-                playerVars: { 'autoplay': 0, 'loop': 1, 'playlist': '-WRUrN5uH48' },
-                events: { 'onReady': () => console.log("YouTube Player Ready") }
+                height: '0', width: '0', videoId: VIDEO_ID,
+                playerVars: { 'autoplay': 0, 'loop': 1, 'playlist': VIDEO_ID },
+                events: { 'onReady': onPlayerReady }
             });
+        }
+        function onPlayerReady() {
+            const btn = document.getElementById('start-button');
+            btn.innerText = "対戦を開始する";
+            btn.classList.add('ready');
+            apiReady = true;
         }
 
         function initGame() {
+            const musicEnabled = document.getElementById('music-toggle').checked;
+            // 音楽ONなら、ここで一度再生してブラウザの制限を解禁する
+            if (musicEnabled && player && player.playVideo) {
+                player.setVolume(50);
+                player.playVideo();
+                player.pauseVideo(); // すぐ一時停止（対戦開始まで待機）
+            }
             document.getElementById('start-overlay').style.display = 'none';
             connect();
         }
 
         function connect() {
             roomId = prompt("ルームID", "0707");
-            if(!roomId) { document.getElementById('start-overlay').style.display = 'flex'; return; }
+            if(!roomId) { location.reload(); return; }
             socket = new WebSocket(SERVER_URL);
-            socket.onopen = () => { document.getElementById('status').innerText = "対戦相手を探しています..."; socket.send(JSON.stringify({ type: 'join', roomId })); };
+            socket.onopen = () => { document.getElementById('status').innerText = "対戦相手を待機中..."; socket.send(JSON.stringify({ type: 'join', roomId })); };
             socket.onmessage = (e) => {
                 const data = JSON.parse(e.data);
                 if (data.type === 'start') {
@@ -116,8 +143,10 @@
                     nextQueue = Array.from({length:4}, () => Math.floor(Math.random()*7)+1);
                     const id = nextQueue.shift(); piece = { id, matrix: SHAPES[id], x: 3, y: 0 };
                     
-                    if(player && player.playVideo) player.playVideo(); // ★YouTube BGM再生
-                    
+                    // 対戦開始時にBGMを再生（設定がONの場合のみ）
+                    if(document.getElementById('music-toggle').checked && player) {
+                        player.playVideo();
+                    }
                     requestAnimationFrame(gameLoop);
                 }
                 if (data.type === 'lose' && !isFinished) showResult(true);
@@ -129,7 +158,7 @@
         function showResult(win) {
             if (isFinished) return;
             isFinished = true; isStarted = false;
-            if(player && player.pauseVideo) player.pauseVideo(); // ★BGM停止
+            if(player && player.pauseVideo) player.pauseVideo();
             const s = document.getElementById('status');
             if (win) { s.innerText = "✨ あなたの勝ちです！ ✨"; s.className = "win-screen"; }
             else { s.innerText = "あなたは負けました..."; s.className = "lose-screen"; socket.send(JSON.stringify({ type: 'lose', roomId })); }
