@@ -3,15 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>テトリス・インフェルノ - 社長公認・安定版</title>
+    <title>テトリス・インフェルノ - 通信強化版</title>
     <style>
-        /* 1. スマホの「青い選択」やメニューを徹底封じ */
         * {
             -webkit-user-select: none !important;
             user-select: none !important;
             -webkit-touch-callout: none !important;
             -webkit-tap-highlight-color: rgba(0,0,0,0) !important;
-            outline: none !important;
         }
         input { -webkit-user-select: auto !important; user-select: auto !important; }
 
@@ -26,8 +24,10 @@
         .btn-red { background: #f44336; }
         .btn-blue { background: #2196f3; }
         
+        /* 状態パネルの強化 */
         .info-panel { display: flex; justify-content: space-around; background: #111; padding: 10px; font-size: 12px; border-bottom: 1px solid #333; }
         .stat-val { color: #ffeb3b; display: block; font-size: 16px; font-weight: bold; }
+        .status-lamp { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: red; margin-right: 5px; }
         
         .main-layout { display: flex; justify-content: center; align-items: flex-end; margin-top: 10px; visibility: hidden; }
         canvas { background: #000; border: 2px solid #333; }
@@ -46,12 +46,12 @@
 
     <div id="start-overlay" class="overlay">
         <div class="box">
-            <h1 style="color:#2196f3; margin:0; font-size:24px;">ひとりモード</h1>
-            <button class="btn btn-blue" id="solo-btn">スタート</button>
+            <h1 style="color:#2196f3; margin:0; font-size:24px;">対戦テトリス</h1>
+            <p style="font-size: 10px; color: #aaa;">サーバー通信：<span id="conn-text" style="color: red;">OFF</span></p>
+            <button class="btn btn-blue" id="solo-btn">ひとりで練習</button>
             <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
-            <h1 style="color:#f44336; margin:0; font-size:24px;">対戦モード</h1>
-            <input type="text" id="room-input" placeholder="合言葉" style="width:100%; padding:10px; margin-bottom:10px; background:#000; color:#fff; border:1px solid #444; box-sizing:border-box; text-align:center;">
-            <button class="btn btn-red" id="battle-btn">接続して参戦</button>
+            <input type="text" id="room-input" placeholder="合言葉を入れる" style="width:100%; padding:10px; margin-bottom:10px; background:#000; color:#fff; border:1px solid #444; box-sizing:border-box; text-align:center;">
+            <button class="btn btn-red" id="battle-btn">対戦モード開始</button>
         </div>
     </div>
 
@@ -66,6 +66,7 @@
     <div id="countdown"></div>
 
     <div class="info-panel">
+        <div><span style="color:#aaa; font-size:10px;">接続</span><span id="status-disp" class="stat-val"><span class="status-lamp" id="lamp"></span><span id="status-label">OFF</span></span></div>
         <div><span style="color:#aaa; font-size:10px;">スコア</span><span id="score-disp" class="stat-val">0</span></div>
         <div><span style="color:#aaa; font-size:10px;">レベル</span><span id="level-disp" class="stat-val">1</span></div>
     </div>
@@ -88,13 +89,14 @@
         <button class="ctrl-btn" onmousedown="handleInput('left')" ontouchstart="handleInput('left', event)">←</button>
         <button class="ctrl-btn" style="background:#2196f3" onmousedown="handleInput('rotate')" ontouchstart="handleInput('rotate', event)">回</button>
         <button class="ctrl-btn" onmousedown="handleInput('right')" ontouchstart="handleInput('right', event)">→</button>
-        <button class="ctrl-btn" style="grid-column:span 3; background:#f44336;" onmousedown="handleInput('drop')" ontouchstart="handleInput('drop', event)">一気に落とす</button>
+        <button class="ctrl-btn" style="grid-column:span 3; background:#f44336;" onmousedown="handleInput('drop')" ontouchstart="handleInput('drop', event)">落下</button>
         <button class="ctrl-btn" id="boost-btn" style="grid-column:span 3; background:#ff9800; font-size:16px;">長押しで加速</button>
     </div>
 
     <script>
-        // 【重要】Renderで発行されたご自身のURL（wss://...）に書き換えてください
-        const SERVER_URL = 'wss://tetris-server-7w6p.onrender.com';
+        // 【最重要】RenderのダッシュボードにあるURLに書き換えてください！
+        // 例: 'wss://my-tetris-go.onrender.com'
+        const SERVER_URL = 'wss://あなたのRenderアプリ名.onrender.com';
         
         const COLS = 10, ROWS = 20, BLOCK_SIZE = 20;
         const bgm = document.getElementById('bgm');
@@ -111,7 +113,49 @@
         localCanvas.height = remoteCanvas.height = ROWS * BLOCK_SIZE;
         const localCtx = localCanvas.getContext('2d'), remoteCtx = remoteCanvas.getContext('2d'), nextCtx = nextCanvas.getContext('2d');
 
-        // PC操作対応
+        function connect() {
+            const lamp = document.getElementById('lamp');
+            const label = document.getElementById('status-label');
+            const connText = document.getElementById('conn-text');
+
+            if(socket) socket.close();
+            socket = new WebSocket(SERVER_URL);
+
+            socket.onopen = () => {
+                lamp.style.background = "#00ff00";
+                label.innerText = "ON";
+                connText.innerText = "ON";
+                connText.style.color = "#00ff00";
+                socket.send(JSON.stringify({ type: 'join', roomId }));
+            };
+
+            socket.onmessage = (e) => {
+                const data = JSON.parse(e.data);
+                if (data.type === 'start') { 
+                    myId = data.userId; 
+                    if(!isStarted) {
+                        document.getElementById('remote-area').style.display = "block";
+                        initGame(); 
+                    }
+                }
+                if (data.type === 'gameData' && data.sender !== myId) { 
+                    remoteBoard = data.board; 
+                    remotePiece = data.piece; 
+                }
+                if (data.type === 'lose' && !isFinished) showResult(true);
+            };
+
+            socket.onclose = () => {
+                lamp.style.background = "red";
+                label.innerText = "OFF";
+            };
+
+            socket.onerror = () => {
+                label.innerText = "ERR";
+            };
+        }
+
+        // --- 以下、ゲームロジック（修正なし） ---
         document.addEventListener('keydown', e => {
             if (!isStarted || isFinished) return;
             if (e.key === 'ArrowLeft') handleInput('left');
@@ -144,14 +188,8 @@
             const timer = setInterval(() => {
                 count--;
                 if(count > 0) cd.innerText = count;
-                else if(count === 0) {
-                    cd.innerText = "GO!";
-                    isStarted = true;
-                    bgm.play().catch(()=>{});
-                } else {
-                    cd.style.display = "none";
-                    clearInterval(timer);
-                }
+                else if(count === 0) { cd.innerText = "GO!"; isStarted = true; bgm.play().catch(()=>{}); }
+                else { cd.style.display = "none"; clearInterval(timer); }
             }, 800);
         }
 
@@ -174,20 +212,11 @@
                 piece.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v && board[y+piece.y]) board[y+piece.y][x+piece.x] = piece.id; }); });
                 let cleared = 0;
                 for (let y = ROWS-1; y>=0; y--) {
-                    if (board[y].every(cell => cell!==0)) {
-                        board.splice(y,1); board.unshift(Array(COLS).fill(0));
-                        cleared++; y++;
-                    }
+                    if (board[y].every(cell => cell!==0)) { board.splice(y,1); board.unshift(Array(COLS).fill(0)); cleared++; y++; }
                 }
-                if(cleared > 0) {
-                    linesCleared += cleared;
-                    score += [0, 100, 300, 500, 800][cleared] * level;
-                    if(linesCleared >= level * 10) level++;
-                    updateUI();
-                }
+                if(cleared > 0) { linesCleared += cleared; score += [0, 100, 300, 500, 800][cleared] * level; if(linesCleared >= level * 10) level++; updateUI(); }
                 spawnPiece();
             }
-            // Goサーバーへ最新の盤面を送信
             if(!isSolo && socket?.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece, sender: myId }));
             }
@@ -226,25 +255,6 @@
             isSolo = false; connect(); 
         };
 
-        function connect() {
-            if(socket) socket.close();
-            socket = new WebSocket(SERVER_URL);
-            socket.onopen = () => { socket.send(JSON.stringify({ type: 'join', roomId })); };
-            socket.onmessage = (e) => {
-                const data = JSON.parse(e.data);
-                if (data.type === 'start') { 
-                    myId = data.userId; 
-                    document.getElementById('remote-area').style.display = "block"; 
-                    if(!isStarted) initGame(); 
-                }
-                if (data.type === 'gameData' && data.sender !== myId) { 
-                    remoteBoard = data.board; 
-                    remotePiece = data.piece; 
-                }
-                if (data.type === 'lose' && !isFinished) showResult(true);
-            };
-        }
-
         function draw(ctx, b, p) {
             ctx.fillStyle = '#000'; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
             ctx.strokeStyle = '#222';
@@ -271,7 +281,6 @@
             }
             draw(localCtx, board, piece);
             if(!isSolo) draw(remoteCtx, remoteBoard, remotePiece);
-            
             nextCtx.fillStyle = '#000'; nextCtx.fillRect(0,0,40,40);
             if(nextQueue[0]){
                 const id=nextQueue[0]; nextCtx.fillStyle=COLORS[id];
@@ -283,4 +292,3 @@
     </script>
 </body>
 </html>
-
