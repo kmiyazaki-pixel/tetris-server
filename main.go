@@ -101,8 +101,13 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// main.go の最後の方
 func main() {
+	port := os.Getenv("PORT") // Renderからポート番号をもらう
+	if port == "" {
+		port = "8080" // ローカルテスト用
+	}
 	http.HandleFunc("/", handleConnections)
-	fmt.Println("Server started on :8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	fmt.Println("Server started on :" + port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
