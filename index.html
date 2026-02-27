@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>テトリス・インフェルノ - 極・完全版</title>
+    <title>テトリス・インフェルノ - 社長公認マイルド版</title>
     <style>
-        /* 青い選択を完全に封印（スマホ用） */
+        /* 青い選択封印 */
         * {
             -webkit-user-select: none !important;
             user-select: none !important;
@@ -20,7 +20,7 @@
         }
 
         .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 2000; }
-        .box { background: #222; padding: 20px; border-radius: 20px; width: 85%; max-width: 300px; border: 2px solid #f44336; }
+        .box { background: #222; padding: 20px; border-radius: 20px; width: 85%; max-width: 300px; border: 2px solid #2196f3; }
         .btn { width: 100%; padding: 15px; font-size: 18px; color: white; border: none; border-radius: 12px; cursor: pointer; margin-bottom: 12px; font-weight: bold; }
         .btn-red { background: #f44336; }
         .btn-blue { background: #2196f3; }
@@ -37,7 +37,7 @@
         .ctrl-btn { background: #333; color: white; border: none; padding: 20px; font-size: 24px; border-radius: 15px; border-bottom: 5px solid #000; touch-action: none; }
         .ctrl-btn:active { transform: translateY(2px); border-bottom-width: 2px; }
         
-        #countdown { position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%); font-size: 70px; font-weight: bold; color: #f44336; z-index: 3000; display: none; }
+        #countdown { position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%); font-size: 70px; font-weight: bold; color: #2196f3; z-index: 3000; display: none; }
     </style>
 </head>
 <body oncontextmenu="return false;">
@@ -45,19 +45,20 @@
 
     <div id="start-overlay" class="overlay">
         <div class="box">
-            <h1 style="color:#f44336; margin:0;">煉獄モード</h1>
-            <button class="btn btn-red" id="solo-btn">一人で地獄へ</button>
+            <h1 style="color:#2196f3; margin:0; font-size:24px;">ひとり練習</h1>
+            <button class="btn btn-blue" id="solo-btn">スタート</button>
             <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
-            <input type="text" id="room-input" placeholder="合言葉" style="width:100%; padding:10px; margin-bottom:10px; background:#000; color:#fff; border:1px solid #444; box-sizing:border-box;">
-            <button class="btn btn-blue" id="battle-btn">対戦開始</button>
+            <h1 style="color:#f44336; margin:0; font-size:24px;">オンライン対戦</h1>
+            <input type="text" id="room-input" placeholder="合言葉" style="width:100%; padding:10px; margin-bottom:10px; background:#000; color:#fff; border:1px solid #444; box-sizing:border-box; text-align:center;">
+            <button class="btn btn-red" id="battle-btn">参戦する</button>
         </div>
     </div>
 
     <div id="result-overlay" class="overlay" style="display:none;">
         <div class="box">
-            <h2 id="result-text" style="color:#f44336;">終了</h2>
-            <p>スコア: <span id="final-score" style="color:#ffeb3b">0</span></p>
-            <button class="btn btn-blue" onclick="location.reload()">もう一度</button>
+            <h2 id="result-text" style="color:#ffeb3b;">GAME OVER</h2>
+            <p>最終スコア: <span id="final-score" style="color:#fff; font-size: 20px;">0</span></p>
+            <button class="btn btn-blue" onclick="location.reload()">タイトルへ</button>
         </div>
     </div>
 
@@ -66,7 +67,7 @@
     <div class="info-panel">
         <div><span style="color:#aaa; font-size:10px;">スコア</span><span id="score-disp" class="stat-val">0</span></div>
         <div><span style="color:#aaa; font-size:10px;">レベル</span><span id="level-disp" class="stat-val">1</span></div>
-        <div id="timer-box"><span style="color:#aaa; font-size:10px;">地雷まで</span><span id="timer-disp" class="stat-val">12秒</span></div>
+        <div id="timer-box" style="display:none;"></div>
     </div>
 
     <div class="main-layout" id="game-layout">
@@ -75,7 +76,6 @@
             <canvas id="nextCanvas" width="40" height="40"></canvas>
         </div>
         <div>
-            <div style="font-size:10px; color:#aaa;">自分</div>
             <canvas id="localCanvas" class="game-canvas"></canvas>
         </div>
         <div id="remote-area" style="display:none; margin-left:10px;">
@@ -86,10 +86,10 @@
 
     <div class="controls">
         <button class="ctrl-btn" onmousedown="handleInput('left')" ontouchstart="handleInput('left', event)">←</button>
-        <button class="ctrl-btn" style="background:#2196f3" onmousedown="handleInput('rotate')" ontouchstart="handleInput('rotate', event)">回転</button>
+        <button class="ctrl-btn" style="background:#2196f3" onmousedown="handleInput('rotate')" ontouchstart="handleInput('rotate', event)">回</button>
         <button class="ctrl-btn" onmousedown="handleInput('right')" ontouchstart="handleInput('right', event)">→</button>
         <button class="ctrl-btn" style="grid-column:span 3; background:#f44336;" onmousedown="handleInput('drop')" ontouchstart="handleInput('drop', event)">一気に落とす</button>
-        <button class="ctrl-btn" id="boost-btn" style="grid-column:span 3; background:#ff9800; font-size:16px;">長押しで早く落とす</button>
+        <button class="ctrl-btn" id="boost-btn" style="grid-column:span 3; background:#ff9800; font-size:16px;">長押しで加速</button>
     </div>
 
     <script>
@@ -99,7 +99,7 @@
         
         let socket, roomId, myId, isStarted = false, isFinished = false, isBoosting = false, isSolo = false;
         let board = [], piece = null, nextQueue = [], remoteBoard = [], remotePiece = null;
-        let score = 0, level = 1, linesCleared = 0, riseTimer = 12;
+        let score = 0, level = 1, linesCleared = 0;
 
         const COLORS = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF', '#777777'];
         const SHAPES = [null, [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]]];
@@ -109,7 +109,6 @@
         localCanvas.height = remoteCanvas.height = ROWS * BLOCK_SIZE;
         const localCtx = localCanvas.getContext('2d'), remoteCtx = remoteCanvas.getContext('2d'), nextCtx = nextCanvas.getContext('2d');
 
-        // キーボード操作の追加
         document.addEventListener('keydown', e => {
             if (!isStarted || isFinished) return;
             if (e.key === 'ArrowLeft') handleInput('left');
@@ -118,9 +117,7 @@
             if (e.key === 'ArrowDown') isBoosting = true;
             if (e.key === ' ') handleInput('drop');
         });
-        document.addEventListener('keyup', e => {
-            if (e.key === 'ArrowDown') isBoosting = false;
-        });
+        document.addEventListener('keyup', e => { if (e.key === 'ArrowDown') isBoosting = false; });
 
         function spawnPiece() {
             if (nextQueue.length < 5) for(let i=0; i<7; i++) nextQueue.push(Math.floor(Math.random()*7)+1);
@@ -135,7 +132,7 @@
             document.getElementById('game-layout').style.visibility = 'visible';
             board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
             remoteBoard = Array.from({length: ROWS}, () => Array(COLS).fill(0));
-            nextQueue = []; score = 0; level = 1; linesCleared = 0; riseTimer = 12;
+            nextQueue = []; score = 0; level = 1; linesCleared = 0;
             isStarted = false; isFinished = false;
             spawnPiece(); updateUI();
             const cd = document.getElementById('countdown');
@@ -145,37 +142,14 @@
                 count--;
                 if(count > 0) cd.innerText = count;
                 else if(count === 0) {
-                    cd.innerText = "開始！";
+                    cd.innerText = "GO!";
                     isStarted = true;
                     bgm.play().catch(()=>{});
-                    if(isSolo) startRiseTimer();
                 } else {
                     cd.style.display = "none";
                     clearInterval(timer);
                 }
             }, 800);
-        }
-
-        function startRiseTimer() {
-            if(!isStarted || isFinished || !isSolo) return;
-            setTimeout(() => {
-                if(!isStarted || isFinished) return;
-                riseTimer--;
-                if(riseTimer <= 0) {
-                    riseBoard();
-                    riseTimer = Math.max(4, 12 - level);
-                }
-                document.getElementById('timer-disp').innerText = riseTimer + "秒";
-                startRiseTimer();
-            }, 1000);
-        }
-
-        function riseBoard() {
-            board.shift();
-            const newRow = Array(COLS).fill(8);
-            newRow[Math.floor(Math.random()*COLS)] = 0;
-            board.push(newRow);
-            if(piece && collide(board, piece)) piece.y--;
         }
 
         function collide(b, p) {
@@ -205,12 +179,15 @@
                 if(cleared > 0) {
                     linesCleared += cleared;
                     score += [0, 100, 300, 500, 800][cleared] * level;
-                    if(linesCleared >= level * 5) level++;
+                    if(linesCleared >= level * 10) level++; // レベルアップ条件を少し緩和
                     updateUI();
                 }
                 spawnPiece();
             }
-            if(!isSolo && socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece }));
+            // 通信頻度を最適化
+            if(!isSolo && socket?.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece }));
+            }
         }
 
         function updateUI() {
@@ -234,35 +211,29 @@
         function showResult(win) {
             if(isFinished) return;
             isFinished = true; isStarted = false; bgm.pause();
+            document.getElementById('final-score').innerText = score;
+            document.getElementById('result-text').innerText = win ? "勝ちました！" : "お疲れ様でした";
             document.getElementById('result-overlay').style.display = "flex";
             if(!isSolo && !win) socket.send(JSON.stringify({ type: 'lose', roomId }));
         }
 
-        document.getElementById('solo-btn').onclick = () => { 
-            isSolo = true; 
-            document.getElementById('timer-box').style.display = "block";
-            document.getElementById('remote-area').style.display = "none";
-            initGame(); 
-        };
-
+        document.getElementById('solo-btn').onclick = () => { isSolo = true; initGame(); };
         document.getElementById('battle-btn').onclick = () => { 
-            roomId = document.getElementById('room-input').value.trim(); 
-            if(!roomId) return alert("合言葉は？");
-            isSolo = false; 
-            document.getElementById('timer-box').style.display = "none";
-            document.getElementById('remote-area').style.display = "block";
-            connect(); 
+            roomId = document.getElementById('room-input').value.trim() || "FREE";
+            isSolo = false; connect(); 
         };
 
         function connect() {
+            if(socket) socket.close();
             socket = new WebSocket(SERVER_URL);
             socket.onopen = () => { socket.send(JSON.stringify({ type: 'join', roomId })); };
             socket.onmessage = (e) => {
                 const data = JSON.parse(e.data);
-                if (data.type === 'start') { myId = data.userId; initGame(); }
+                if (data.type === 'start') { myId = data.userId; document.getElementById('remote-area').style.display = "block"; initGame(); }
                 if (data.type === 'gameData' && data.sender !== myId) { remoteBoard = data.board; remotePiece = data.piece; }
                 if (data.type === 'lose' && !isFinished) showResult(true);
             };
+            socket.onclose = () => { if(!isFinished && !isSolo) alert("通信が切れました。再接続してください。"); };
         }
 
         function draw(ctx, b, p) {
@@ -276,10 +247,8 @@
         }
 
         const bBtn=document.getElementById('boost-btn');
-        // スマホ用
         bBtn.addEventListener('touchstart', (e) => { e.preventDefault(); isBoosting = true; }, {passive: false});
         bBtn.addEventListener('touchend', (e) => { e.preventDefault(); isBoosting = false; }, {passive: false});
-        // PCマウスクリック用
         bBtn.addEventListener('mousedown', () => { isBoosting = true; });
         bBtn.addEventListener('mouseup', () => { isBoosting = false; });
         
@@ -288,8 +257,9 @@
             const dt=time-lastTime; lastTime=time;
             if(isStarted && !isFinished){
                 dropCounter += dt;
-                const interval = Math.max(30, 800 * Math.pow(0.8, level-1));
-                if(dropCounter > (isBoosting ? 20 : interval)){ drop(); dropCounter = 0; }
+                // 落下速度を以前より少し緩やかに設定
+                const interval = Math.max(50, 800 * Math.pow(0.85, level-1));
+                if(dropCounter > (isBoosting ? 25 : interval)){ drop(); dropCounter = 0; }
             }
             draw(localCtx, board, piece);
             if(!isSolo) draw(remoteCtx, remoteBoard, remotePiece);
@@ -305,4 +275,3 @@
     </script>
 </body>
 </html>
-
