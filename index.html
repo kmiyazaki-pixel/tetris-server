@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TETRIS BATTLE - SIDE BY SIDE</title>
+    <title>TETRIS BATTLE - PRO LAYOUT</title>
     <style>
         :root { --neon-blue: #00d2ff; --neon-pink: #ff007f; --glass: rgba(255, 255, 255, 0.05); }
         body { background: #05050a; color: #fff; font-family: 'Arial Black', sans-serif; display: flex; flex-direction: column; align-items: center; height: 100vh; margin: 0; overflow: hidden; touch-action: none; }
@@ -11,41 +11,42 @@
         #menu { text-align: center; margin-top: 20vh; background: var(--glass); padding: 25px; border-radius: 20px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); width: 260px; }
         .menu-btn { display: block; width: 100%; padding: 12px; margin: 8px 0; font-size: 15px; background: transparent; color: #0f0; border: 2px solid #0f0; border-radius: 50px; cursor: pointer; }
 
-        /* 対戦エリア：横並び */
-        #game-container { display: none; flex-direction: column; align-items: center; width: 100%; height: 100vh; padding-top: 20px; }
+        /* ゲームメインエリア */
+        #game-container { display: none; flex-direction: column; align-items: center; width: 100%; height: 100vh; justify-content: flex-end; padding-bottom: 20px; }
         
+        /* 対戦エリア：ボタンのすぐ上に配置 */
         .battle-arena { 
             display: flex; 
             justify-content: center; 
-            align-items: flex-end; /* 下揃えにすることでサイズ差があっても安定 */
-            gap: 10px; 
-            width: 98%; 
+            align-items: flex-end; 
+            gap: 12px; 
+            width: 100%;
+            margin-bottom: 15px; /* ボタンとの隙間 */
         }
 
-        /* 自分：標準サイズ */
+        /* 自分：メイン */
         .player-zone { display: flex; flex-direction: column; align-items: center; }
-        #tetris { width: 180px; height: 300px; border: 3px solid var(--neon-blue); box-shadow: 0 0 10px var(--neon-blue); }
+        #tetris { width: 190px; height: 320px; border: 3px solid var(--neon-blue); box-shadow: 0 0 15px rgba(0, 210, 255, 0.3); border-radius: 8px; }
 
-        /* 相手：60%程度のサイズ */
+        /* 相手：サブ（自分より少し小さく、ボタンの右上に添える感じ） */
         .enemy-zone { display: flex; flex-direction: column; align-items: center; margin-bottom: 5px; }
-        #enemy-canvas { width: 108px; height: 180px; border: 2px solid var(--neon-pink); opacity: 0.7; }
+        #enemy-canvas { width: 110px; height: 180px; border: 2px solid var(--neon-pink); opacity: 0.7; border-radius: 5px; }
 
-        .label { font-size: 10px; margin-bottom: 2px; letter-spacing: 1px; }
+        .label { font-size: 10px; margin-bottom: 4px; letter-spacing: 1px; color: #aaa; }
 
-        /* 操作パネル：親指で押しやすいよう下部に固定 */
+        /* 操作パネル：最下部に固定 */
         .controls { 
             display: grid; 
             grid-template-columns: repeat(5, 1fr); 
             gap: 8px; 
             width: 95%; 
-            max-width: 450px; 
-            margin-top: auto; 
-            margin-bottom: 30px; 
+            max-width: 480px; 
         }
-        .controls button { padding: 18px 0; font-size: 22px; background: var(--glass); color: #fff; border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; }
+        .controls button { padding: 20px 0; font-size: 24px; background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.15); border-radius: 12px; transition: 0.1s; }
+        .controls button:active { background: rgba(255,255,255,0.2); transform: scale(0.95); }
         .btn-hard { background: linear-gradient(135deg, var(--neon-blue), #0055ff) !important; border: none !important; }
 
-        #result-overlay { display: none; position: absolute; top: 30%; font-size: 50px; font-weight: bold; z-index: 100; text-shadow: 0 0 20px #000; }
+        #result-overlay { display: none; position: absolute; top: 25%; font-size: 60px; font-weight: bold; z-index: 100; text-shadow: 0 0 30px #000; }
     </style>
 </head>
 <body>
@@ -53,12 +54,12 @@
     <audio id="bgm" loop><source src="Tetris DS OST - Mario Tetris.mp3" type="audio/mpeg"></audio>
 
     <div id="menu">
-        <h1 style="color:var(--neon-blue); font-size: 20px;">TETRIS VERSUS</h1>
-        <button class="menu-btn" onclick="initGame('solo')">SOLO</button>
-        <button class="menu-btn" onclick="showMatchSettings()">BATTLE</button>
+        <h1 style="color:var(--neon-blue); font-size: 22px;">TETRIS STRIKE</h1>
+        <button class="menu-btn" onclick="initGame('solo')">SINGLE PLAY</button>
+        <button class="menu-btn" onclick="showMatchSettings()">VERSUS BATTLE</button>
         <div id="match-settings" style="display:none; margin-top: 10px;">
-            <input type="text" id="roomId" value="123" style="width:40px; padding:5px;">
-            <button onclick="initGame('multi')" style="background:#0f0; border:none; padding:5px 10px; border-radius:5px;">GO</button>
+            <input type="text" id="roomId" value="123" style="width:50px; padding:8px; border-radius: 5px; border:none;">
+            <button onclick="initGame('multi')" style="background:#0f0; border:none; padding:8px 15px; border-radius:5px; font-weight:bold;">GO</button>
         </div>
     </div>
 
@@ -67,7 +68,7 @@
         
         <div class="battle-arena">
             <div class="player-zone">
-                <div class="label" style="color:var(--neon-blue)">YOU (<span id="score">0</span>)</div>
+                <div class="label">YOU: <span id="score" style="color:var(--neon-blue)">0</span></div>
                 <canvas id="tetris" width="240" height="400"></canvas>
             </div>
 
@@ -87,7 +88,7 @@
     </div>
 
     <script>
-        // --- ロジック部分は「お邪魔ブロック」と「モバイル操作」を完備した最新版を維持 ---
+        // --- ロジック部分は「お邪魔ブロック」と「モバイル操作」を完備した最新版 ---
         const canvas = document.getElementById('tetris');
         const context = canvas.getContext('2d');
         const enemyCanvas = document.getElementById('enemy-canvas');
@@ -163,6 +164,7 @@
             resultOverlay.innerText = status;
             resultOverlay.className = status === 'WIN' ? 'win' : 'lose';
             resultOverlay.style.display = 'block';
+            bgm.pause();
         }
 
         function sendUpdate() {
@@ -308,6 +310,9 @@
                 if(gameMode === 'multi' && !isGameOver) {
                     socket.send(JSON.stringify({type: "lose", roomId: currentRoomId}));
                     showResult('LOSE');
+                } else if(gameMode === 'solo') {
+                    alert("GAME OVER\nSCORE: " + player.score);
+                    location.reload();
                 }
             }
             sendUpdate();
