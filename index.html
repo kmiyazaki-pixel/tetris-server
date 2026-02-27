@@ -3,19 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TETRIS VERSUS - LUXURY EDITION</title>
+    <title>TETRIS VERSUS - SYMMETRY</title>
     <style>
         :root {
-            --neon-green: #0f0;
             --neon-blue: #00d2ff;
             --neon-pink: #ff007f;
-            --glass: rgba(255, 255, 255, 0.1);
+            --glass: rgba(255, 255, 255, 0.05);
         }
 
         body {
-            background: radial-gradient(circle at center, #1a1a2e 0%, #020205 100%);
+            background: #05050a;
             color: #fff;
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: 'Arial', sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -25,51 +24,21 @@
             overflow: hidden;
         }
 
-        /* 豪華なメニュー */
         #menu {
             text-align: center;
             background: var(--glass);
-            padding: 40px;
+            padding: 30px;
             border-radius: 20px;
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255,255,255,0.1);
-            box-shadow: 0 0 30px rgba(0,0,0,0.5);
-        }
-
-        h1 {
-            font-size: 42px;
-            margin-bottom: 30px;
-            background: linear-gradient(to bottom, #fff, #888);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            text-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
-            letter-spacing: 5px;
         }
 
         .menu-btn {
-            display: block;
-            width: 100%;
-            padding: 15px 0;
-            margin: 10px 0;
-            font-size: 20px;
-            font-weight: bold;
-            text-transform: uppercase;
-            background: transparent;
-            color: var(--neon-green);
-            border: 2px solid var(--neon-green);
-            border-radius: 50px;
-            cursor: pointer;
-            transition: all 0.3s;
-            box-shadow: inset 0 0 10px var(--neon-green), 0 0 10px var(--neon-green);
+            display: block; width: 200px; padding: 15px; margin: 10px auto;
+            font-size: 18px; background: transparent; color: #0f0;
+            border: 2px solid #0f0; border-radius: 50px; cursor: pointer;
         }
 
-        .menu-btn:hover {
-            background: var(--neon-green);
-            color: #000;
-            box-shadow: 0 0 30px var(--neon-green);
-        }
-
-        /* ゲーム画面 */
         #game-container {
             display: none;
             flex-direction: column;
@@ -77,50 +46,45 @@
             width: 100%;
         }
 
-        .status-bar {
-            width: 90%;
-            max-width: 400px;
+        /* 画面を左右に並べるレイアウト */
+        .battle-arena {
             display: flex;
-            justify-content: space-between;
-            background: var(--glass);
-            padding: 10px 20px;
-            border-radius: 15px;
-            margin-bottom: 15px;
-            border: 1px solid rgba(255,255,255,0.1);
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            width: 95%;
         }
 
-        .boards-layout {
+        .player-zone {
             display: flex;
-            align-items: flex-end;
-            gap: 20px;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .label {
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 5px;
+            letter-spacing: 2px;
         }
 
         canvas {
-            border-radius: 10px;
-            box-shadow: 0 0 20px rgba(0,0,0,0.8);
-        }
-
-        #tetris {
-            border: 3px solid #fff;
-            height: 58vh;
+            background: #000;
+            border-radius: 5px;
+            height: 50vh; /* 両方のサイズを統一 */
             aspect-ratio: 12 / 20;
-            box-shadow: 0 0 15px var(--neon-blue);
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
 
-        #enemy-canvas {
-            border: 2px solid var(--neon-pink);
-            height: 25vh;
-            aspect-ratio: 12 / 20;
-            box-shadow: 0 0 10px var(--neon-pink);
-        }
+        #tetris { border: 3px solid var(--neon-blue); }
+        #enemy-canvas { border: 3px solid var(--neon-pink); }
 
-        /* 操作パネル（↓削除、他を拡大） */
         .controls {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
             gap: 10px;
-            width: 95%;
-            max-width: 500px;
+            width: 90%;
+            max-width: 450px;
             margin-top: 20px;
         }
 
@@ -129,29 +93,17 @@
             font-size: 24px;
             background: var(--glass);
             color: #fff;
-            border: 1px solid rgba(255,255,255,0.3);
-            border-radius: 15px;
-            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 10px;
             touch-action: manipulation;
         }
 
-        .controls button:active {
-            background: rgba(255,255,255,0.3);
-            transform: scale(0.95);
-        }
-
         .btn-hard {
-            grid-column: span 1;
-            background: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%) !important;
+            background: linear-gradient(135deg, var(--neon-blue), #0055ff) !important;
             border: none !important;
-            font-weight: bold;
-            box-shadow: 0 0 15px var(--neon-blue);
         }
 
-        .status-lamp {
-            width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: #555;
-        }
-        .status-lamp.on { background: var(--neon-green); box-shadow: 0 0 8px var(--neon-green); }
+        .score-val { color: var(--neon-blue); font-size: 20px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
@@ -159,30 +111,27 @@
     <audio id="bgm" loop><source src="Tetris DS OST - Mario Tetris.mp3" type="audio/mpeg"></audio>
 
     <div id="menu">
-        <h1>NEON TETRIS</h1>
-        <button class="menu-btn" onclick="initGame('solo')">SOLO START</button>
-        <button class="menu-btn" onclick="showMatchSettings()">VERSUS MODE</button>
-        <div id="match-settings" style="display:none; margin-top:15px;">
-            <input type="text" id="roomId" placeholder="CODE" value="123" 
-                   style="padding:12px; width:100px; border-radius:10px; border:none; text-align:center; font-size:18px;">
-            <button onclick="initGame('multi')" 
-                    style="padding:12px 20px; font-size:16px; border-radius:10px; background:var(--neon-blue); color:#000; border:none; font-weight:bold; margin-top:10px; cursor:pointer;">CONNECT</button>
+        <h1 style="color:var(--neon-blue)">BATTLE MODE</h1>
+        <button class="menu-btn" onclick="initGame('solo')">SOLO</button>
+        <button class="menu-btn" onclick="showMatchSettings()">VERSUS</button>
+        <div id="match-settings" style="display:none;">
+            <input type="text" id="roomId" value="123" style="padding:10px; width:60px; text-align:center;">
+            <button onclick="initGame('multi')" style="padding:10px; background:#0f0; border:none; border-radius:5px;">GO</button>
         </div>
     </div>
 
     <div id="game-container">
-        <div class="status-bar">
-            <div>SCORE: <span id="score" style="color:var(--neon-green)">0</span></div>
-            <div id="multi-info" style="display:none;">
-                <div id="statusLamp" class="status-lamp"></div> <span id="statusText" style="font-size:12px;">LINKED</span>
-            </div>
-        </div>
+        <div class="score-val">SCORE: <span id="score">0</span></div>
         
-        <div class="boards-layout">
-            <canvas id="tetris" width="240" height="400"></canvas>
-            <div id="enemy-area" style="display:none; text-align:center;">
-                <div style="font-size:12px; color:var(--neon-pink); margin-bottom:5px; font-weight:bold;">ENEMY</div>
-                <canvas id="enemy-canvas" width="120" height="200"></canvas>
+        <div class="battle-arena">
+            <div class="player-zone">
+                <div class="label" style="color:var(--neon-blue)">YOU</div>
+                <canvas id="tetris" width="240" height="400"></canvas>
+            </div>
+
+            <div class="player-zone" id="enemy-zone" style="display:none;">
+                <div class="label" style="color:var(--neon-pink)">ENEMY</div>
+                <canvas id="enemy-canvas" width="240" height="400"></canvas>
             </div>
         </div>
 
@@ -196,7 +145,6 @@
     </div>
 
     <script>
-        // --- 内部ロジックはサーバー仕様に合わせた前回の完璧なものを維持 ---
         const canvas = document.getElementById('tetris');
         const context = canvas.getContext('2d');
         const enemyCanvas = document.getElementById('enemy-canvas');
@@ -204,7 +152,7 @@
         const bgm = document.getElementById('bgm');
 
         context.scale(20, 20);
-        enemyCtx.scale(10, 10);
+        enemyCtx.scale(20, 20); // 相手のスケールも自分と同じに
 
         const SERVER_URL = 'wss://tetris-server-new.onrender.com';
         let socket = null;
@@ -233,8 +181,7 @@
             document.getElementById('game-container').style.display = 'flex';
             if (mode === 'multi') {
                 currentRoomId = document.getElementById('roomId').value;
-                document.getElementById('multi-info').style.display = 'block';
-                document.getElementById('enemy-area').style.display = 'block';
+                document.getElementById('enemy-zone').style.display = 'flex';
                 startOnline();
             }
             playerReset();
@@ -244,7 +191,6 @@
         function startOnline() {
             socket = new WebSocket(SERVER_URL);
             socket.onopen = () => {
-                document.getElementById('statusLamp').className = 'status-lamp on';
                 socket.send(JSON.stringify({ type: "join", roomId: currentRoomId }));
             };
             socket.onmessage = (event) => {
@@ -263,25 +209,21 @@
             }
         }
 
-        function drawGrid(ctx, w, h) {
-            ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-            ctx.lineWidth = 0.05;
-            for (let i = 0; i <= w; i++) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, h); ctx.stroke(); }
-            for (let i = 0; i <= h; i++) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(w, i); ctx.stroke(); }
+        // --- ゴースト描画ロジック ---
+        function getGhostPos() {
+            const ghost = { pos: {x: player.pos.x, y: player.pos.y}, matrix: player.matrix };
+            while (!collide(arena, ghost)) { ghost.pos.y++; }
+            ghost.pos.y--;
+            return ghost.pos;
         }
 
-        function drawMatrix(matrix, offset, ctx, isEnemy=false) {
+        function drawMatrix(matrix, offset, ctx, colorOverride = null) {
             if(!matrix) return;
             matrix.forEach((row, y) => {
                 row.forEach((value, x) => {
                     if (value !== 0) {
-                        ctx.shadowBlur = isEnemy ? 0 : 10;
-                        ctx.shadowColor = colors[value];
-                        ctx.fillStyle = colors[value];
+                        ctx.fillStyle = colorOverride || colors[value];
                         ctx.fillRect(x + offset.x, y + offset.y, 1, 1);
-                        // ブロックの内側に光沢感
-                        ctx.fillStyle = 'rgba(255,255,255,0.3)';
-                        ctx.fillRect(x + offset.x + 0.1, y + offset.y + 0.1, 0.3, 0.3);
                     }
                 });
             });
@@ -290,7 +232,11 @@
         function draw() {
             context.fillStyle = '#050510';
             context.fillRect(0, 0, canvas.width, canvas.height);
-            drawGrid(context, 12, 20);
+            
+            // ゴーストの描画
+            const ghostPos = getGhostPos();
+            drawMatrix(player.matrix, ghostPos, context, 'rgba(255, 255, 255, 0.15)');
+
             drawMatrix(arena, {x: 0, y: 0}, context);
             drawMatrix(player.matrix, player.pos, context);
         }
@@ -298,9 +244,8 @@
         function drawEnemy(data) {
             enemyCtx.fillStyle = '#100505';
             enemyCtx.fillRect(0, 0, enemyCanvas.width, enemyCanvas.height);
-            drawGrid(enemyCtx, 12, 20);
-            if (data.arena) drawMatrix(data.arena, {x: 0, y: 0}, enemyCtx, true);
-            if (data.matrix) drawMatrix(data.matrix, data.pos, enemyCtx, true);
+            if (data.arena) drawMatrix(data.arena, {x: 0, y: 0}, enemyCtx);
+            if (data.matrix) drawMatrix(data.matrix, data.pos, enemyCtx);
         }
 
         function playerDrop() {
@@ -316,8 +261,7 @@
         }
 
         function hardDrop() {
-            while (!collide(arena, player)) { player.pos.y++; }
-            player.pos.y--;
+            player.pos = getGhostPos();
             merge(arena, player);
             playerReset();
             arenaSweep();
