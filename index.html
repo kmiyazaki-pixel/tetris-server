@@ -1,300 +1,344 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>テトリス・インフェルノ - 通信強化版</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tetris Online Desktop</title>
     <style>
-        * {
-            -webkit-user-select: none !important;
-            user-select: none !important;
-            -webkit-touch-callout: none !important;
-            -webkit-tap-highlight-color: rgba(0,0,0,0) !important;
+        /* レイアウトの全体調整 */
+        body {
+            background: #202028;
+            color: #fff;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden; /* スクロールを禁止して操作性を向上 */
         }
-        input { -webkit-user-select: auto !important; user-select: auto !important; }
 
-        body { 
-            background: #000; color: white; text-align: center; font-family: sans-serif; 
-            margin: 0; overflow: hidden; position: fixed; width: 100%; height: 100%; touch-action: none; 
+        /* メインのゲーム画面：大きく表示 */
+        #tetris {
+            border: 4px solid #fff;
+            background-color: #000;
+            height: 70vh; /* 画面の高さの70%を専有 */
+            aspect-ratio: 1 / 2;
+            display: block;
         }
 
-        .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 2000; }
-        .box { background: #222; padding: 20px; border-radius: 20px; width: 85%; max-width: 300px; border: 2px solid #2196f3; }
-        .btn { width: 100%; padding: 15px; font-size: 18px; color: white; border: none; border-radius: 12px; cursor: pointer; margin-bottom: 12px; font-weight: bold; }
-        .btn-red { background: #f44336; }
-        .btn-blue { background: #2196f3; }
-        
-        /* 状態パネルの強化 */
-        .info-panel { display: flex; justify-content: space-around; background: #111; padding: 10px; font-size: 12px; border-bottom: 1px solid #333; }
-        .stat-val { color: #ffeb3b; display: block; font-size: 16px; font-weight: bold; }
-        .status-lamp { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: red; margin-right: 5px; }
-        
-        .main-layout { display: flex; justify-content: center; align-items: flex-end; margin-top: 10px; visibility: hidden; }
-        canvas { background: #000; border: 2px solid #333; }
-        .game-canvas { width: 150px; height: 300px; }
-        .remote-canvas { width: 80px; height: 160px; opacity: 0.6; border-color: #555; }
-        
-        .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 90%; max-width: 360px; margin: 15px auto; }
-        .ctrl-btn { background: #333; color: white; border: none; padding: 20px; font-size: 24px; border-radius: 15px; border-bottom: 5px solid #000; touch-action: none; }
-        .ctrl-btn:active { transform: translateY(2px); border-bottom-width: 2px; }
-        
-        #countdown { position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%); font-size: 70px; font-weight: bold; color: #2196f3; z-index: 3000; display: none; }
+        .status-container {
+            display: flex;
+            gap: 20px;
+            margin: 5px 0;
+            font-size: 14px;
+        }
+
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .status-lamp {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #f00; /* デフォルトは赤 */
+            box-shadow: 0 0 5px #000;
+        }
+
+        .status-lamp.on { background: #0f0; box-shadow: 0 0 10px #0f0; }
+        .status-lamp.err { background: #ff0; box-shadow: 0 0 10px #ff0; }
+
+        /* 設定エリア：コンパクトに */
+        .setup-controls {
+            margin-bottom: 5px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .setup-controls input {
+            width: 60px;
+            padding: 4px;
+            border-radius: 4px;
+            border: none;
+            text-align: center;
+        }
+
+        .setup-controls button {
+            padding: 4px 12px;
+            background: #444;
+            color: white;
+            border: 1px solid #666;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        /* 操作ボタン：小さくスッキリと配置 */
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .controls button {
+            width: 60px;
+            height: 45px;
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border: 1px solid #fff;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            touch-action: manipulation; /* 連打のズーム防止 */
+        }
+
+        .controls button:active {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-down { grid-column: 2; }
     </style>
 </head>
-<body oncontextmenu="return false;">
-    <audio id="bgm" loop><source src="Tetris DS OST - Mario Tetris.mp3" type="audio/mpeg"></audio>
+<body>
 
-    <div id="start-overlay" class="overlay">
-        <div class="box">
-            <h1 style="color:#2196f3; margin:0; font-size:24px;">対戦テトリス</h1>
-            <p style="font-size: 10px; color: #aaa;">サーバー通信：<span id="conn-text" style="color: red;">OFF</span></p>
-            <button class="btn btn-blue" id="solo-btn">ひとりで練習</button>
-            <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
-            <input type="text" id="room-input" placeholder="合言葉を入れる" style="width:100%; padding:10px; margin-bottom:10px; background:#000; color:#fff; border:1px solid #444; box-sizing:border-box; text-align:center;">
-            <button class="btn btn-red" id="battle-btn">対戦モード開始</button>
+    <div class="status-container">
+        <div id="score">Score: 0</div>
+        <div class="connection-status">
+            <div id="statusLamp" class="status-lamp"></div>
+            <span id="statusText">OFF</span>
         </div>
     </div>
 
-    <div id="result-overlay" class="overlay" style="display:none;">
-        <div class="box">
-            <h2 id="result-text" style="color:#ffeb3b;">GAME OVER</h2>
-            <p>最終スコア: <span id="final-score" style="color:#fff; font-size: 20px;">0</span></p>
-            <button class="btn btn-blue" onclick="location.reload()">タイトルへ</button>
-        </div>
+    <div class="setup-controls">
+        <input type="text" id="roomId" placeholder="合言葉" value="123">
+        <button onclick="startOnline()">対戦モード開始</button>
     </div>
 
-    <div id="countdown"></div>
-
-    <div class="info-panel">
-        <div><span style="color:#aaa; font-size:10px;">接続</span><span id="status-disp" class="stat-val"><span class="status-lamp" id="lamp"></span><span id="status-label">OFF</span></span></div>
-        <div><span style="color:#aaa; font-size:10px;">スコア</span><span id="score-disp" class="stat-val">0</span></div>
-        <div><span style="color:#aaa; font-size:10px;">レベル</span><span id="level-disp" class="stat-val">1</span></div>
-    </div>
-
-    <div class="main-layout" id="game-layout">
-        <div style="margin-right:10px; text-align:center;">
-            <div style="font-size:10px; color:#aaa;">次</div>
-            <canvas id="nextCanvas" width="40" height="40"></canvas>
-        </div>
-        <div>
-            <canvas id="localCanvas" class="game-canvas"></canvas>
-        </div>
-        <div id="remote-area" style="display:none; margin-left:10px;">
-            <div style="font-size:10px; color:#aaa;">相手</div>
-            <canvas id="remoteCanvas" class="remote-canvas"></canvas>
-        </div>
-    </div>
+    <canvas id="tetris" width="240" height="480"></canvas>
 
     <div class="controls">
-        <button class="ctrl-btn" onmousedown="handleInput('left')" ontouchstart="handleInput('left', event)">←</button>
-        <button class="ctrl-btn" style="background:#2196f3" onmousedown="handleInput('rotate')" ontouchstart="handleInput('rotate', event)">回</button>
-        <button class="ctrl-btn" onmousedown="handleInput('right')" ontouchstart="handleInput('right', event)">→</button>
-        <button class="ctrl-btn" style="grid-column:span 3; background:#f44336;" onmousedown="handleInput('drop')" ontouchstart="handleInput('drop', event)">落下</button>
-        <button class="ctrl-btn" id="boost-btn" style="grid-column:span 3; background:#ff9800; font-size:16px;">長押しで加速</button>
+        <button onclick="playerRotate(-1)">↺</button>
+        <button onclick="playerRotate(1)">↻</button>
+        <button onclick="playerDrop()">↓</button>
+        <button onclick="playerMove(-1)">←</button>
+        <button onclick="playerMove(1)">→</button>
     </div>
 
     <script>
-        // 【最重要】RenderのダッシュボードにあるURLに書き換えてください！
-        // 例: 'wss://tetris-server-7w6p.onrender.com'
+        const canvas = document.getElementById('tetris');
+        const context = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const statusLamp = document.getElementById('statusLamp');
+        const statusText = document.getElementById('statusText');
+
+        context.scale(20, 20);
+
+        // サーバーURL設定（固定）
         const SERVER_URL = 'wss://tetris-server-new.onrender.com';
-        
-        const COLS = 10, ROWS = 20, BLOCK_SIZE = 20;
-        const bgm = document.getElementById('bgm');
-        
-        let socket, roomId, myId, isStarted = false, isFinished = false, isBoosting = false, isSolo = false;
-        let board = [], piece = null, nextQueue = [], remoteBoard = [], remotePiece = null;
-        let score = 0, level = 1, linesCleared = 0;
+        let socket = null;
 
-        const COLORS = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF', '#777777'];
-        const SHAPES = [null, [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,1,0],[0,1,1]], [[0,1,1],[1,1,0]], [[1,0,0],[1,1,1]], [[0,0,1],[1,1,1]]];
+        function updateStatus(state, text) {
+            statusLamp.className = 'status-lamp ' + state;
+            statusText.innerText = text;
+        }
 
-        const localCanvas = document.getElementById('localCanvas'), remoteCanvas = document.getElementById('remoteCanvas'), nextCanvas = document.getElementById('nextCanvas');
-        localCanvas.width = remoteCanvas.width = COLS * BLOCK_SIZE;
-        localCanvas.height = remoteCanvas.height = ROWS * BLOCK_SIZE;
-        const localCtx = localCanvas.getContext('2d'), remoteCtx = remoteCanvas.getContext('2d'), nextCtx = nextCanvas.getContext('2d');
+        function startOnline() {
+            const roomId = document.getElementById('roomId').value;
+            if (!roomId) return alert("合言葉を入れてください");
 
-        function connect() {
-            const lamp = document.getElementById('lamp');
-            const label = document.getElementById('status-label');
-            const connText = document.getElementById('conn-text');
+            if (socket) socket.close();
+            
+            updateStatus('err', 'Connecting...');
+            socket = new WebSocket(`${SERVER_URL}?room=${roomId}`);
 
-            if(socket) socket.close();
-            socket = new WebSocket(SERVER_URL);
+            socket.onopen = () => updateStatus('on', 'ON');
+            socket.onclose = () => updateStatus('', 'OFF');
+            socket.onerror = () => updateStatus('err', 'ERR');
 
-            socket.onopen = () => {
-                lamp.style.background = "#00ff00";
-                label.innerText = "ON";
-                connText.innerText = "ON";
-                connText.style.color = "#00ff00";
-                socket.send(JSON.stringify({ type: 'join', roomId }));
-            };
-
-            socket.onmessage = (e) => {
-                const data = JSON.parse(e.data);
-                if (data.type === 'start') { 
-                    myId = data.userId; 
-                    if(!isStarted) {
-                        document.getElementById('remote-area').style.display = "block";
-                        initGame(); 
-                    }
+            socket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'update') {
+                    // 相手の情報を描画する処理（必要に応じて拡張）
+                    console.log("Enemy update:", data);
                 }
-                if (data.type === 'gameData' && data.sender !== myId) { 
-                    remoteBoard = data.board; 
-                    remotePiece = data.piece; 
+            };
+        }
+
+        function arenaSweep() {
+            let rowCount = 1;
+            outer: for (let y = arena.length - 1; y > 0; --y) {
+                for (let x = 0; x < arena[y].length; ++x) {
+                    if (arena[y][x] === 0) continue outer;
                 }
-                if (data.type === 'lose' && !isFinished) showResult(true);
-            };
-
-            socket.onclose = () => {
-                lamp.style.background = "red";
-                label.innerText = "OFF";
-            };
-
-            socket.onerror = () => {
-                label.innerText = "ERR";
-            };
+                const row = arena.splice(y, 1)[0].fill(0);
+                arena.unshift(row);
+                ++y;
+                player.score += rowCount * 10;
+                rowCount *= 2;
+            }
+            updateScore();
         }
 
-        // --- 以下、ゲームロジック（修正なし） ---
-        document.addEventListener('keydown', e => {
-            if (!isStarted || isFinished) return;
-            if (e.key === 'ArrowLeft') handleInput('left');
-            if (e.key === 'ArrowRight') handleInput('right');
-            if (e.key === 'ArrowUp') handleInput('rotate');
-            if (e.key === 'ArrowDown') isBoosting = true;
-            if (e.key === ' ') handleInput('drop');
-        });
-        document.addEventListener('keyup', e => { if (e.key === 'ArrowDown') isBoosting = false; });
-
-        function spawnPiece() {
-            if (nextQueue.length < 5) for(let i=0; i<7; i++) nextQueue.push(Math.floor(Math.random()*7)+1);
-            const id = nextQueue.shift();
-            piece = { id, matrix: SHAPES[id], x: 3, y: 0 };
-            if (collide(board, piece)) showResult(false);
-        }
-
-        function initGame() {
-            document.getElementById('start-overlay').style.display = 'none';
-            document.getElementById('result-overlay').style.display = 'none';
-            document.getElementById('game-layout').style.visibility = 'visible';
-            board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
-            remoteBoard = Array.from({length: ROWS}, () => Array(COLS).fill(0));
-            nextQueue = []; score = 0; level = 1; linesCleared = 0;
-            isStarted = false; isFinished = false;
-            spawnPiece(); updateUI();
-            const cd = document.getElementById('countdown');
-            cd.innerText = "3"; cd.style.display = "block";
-            let count = 3;
-            const timer = setInterval(() => {
-                count--;
-                if(count > 0) cd.innerText = count;
-                else if(count === 0) { cd.innerText = "GO!"; isStarted = true; bgm.play().catch(()=>{}); }
-                else { cd.style.display = "none"; clearInterval(timer); }
-            }, 800);
-        }
-
-        function collide(b, p) {
-            for(let y=0; y<p.matrix.length; y++) {
-                for(let x=0; x<p.matrix[y].length; x++) {
-                    if(p.matrix[y][x]) {
-                        if(!b[y+p.y] || b[y+p.y][x+p.x] === undefined || b[y+p.y][x+p.x] !== 0) return true;
+        function collide(arena, player) {
+            const [m, o] = [player.matrix, player.pos];
+            for (let y = 0; y < m.length; ++y) {
+                for (let x = 0; x < m[y].length; ++x) {
+                    if (m[y][x] !== 0 && (arena[y + o.y] && arena[y + o.y][x + o.x]) !== 0) {
+                        return true;
                     }
                 }
             }
             return false;
         }
 
-        function drop() {
-            if (!isStarted || isFinished || !piece) return;
-            piece.y++;
-            if (collide(board, piece)) {
-                piece.y--;
-                piece.matrix.forEach((row, y) => { row.forEach((v, x) => { if(v && board[y+piece.y]) board[y+piece.y][x+piece.x] = piece.id; }); });
-                let cleared = 0;
-                for (let y = ROWS-1; y>=0; y--) {
-                    if (board[y].every(cell => cell!==0)) { board.splice(y,1); board.unshift(Array(COLS).fill(0)); cleared++; y++; }
+        function createMatrix(w, h) {
+            const matrix = [];
+            while (h--) matrix.push(new Array(w).fill(0));
+            return matrix;
+        }
+
+        function createPiece(type) {
+            if (type === 'T') return [[0, 1, 0], [1, 1, 1], [0, 0, 0]];
+            else if (type === 'O') return [[2, 2], [2, 2]];
+            else if (type === 'L') return [[0, 3, 0], [0, 3, 0], [0, 3, 3]];
+            else if (type === 'J') return [[0, 4, 0], [0, 4, 0], [4, 4, 0]];
+            else if (type === 'I') return [[0, 5, 0, 0], [0, 5, 0, 0], [0, 5, 0, 0], [0, 5, 0, 0]];
+            else if (type === 'S') return [[0, 6, 6], [6, 6, 0], [0, 0, 0]];
+            else if (type === 'Z') return [[7, 7, 0], [0, 7, 7], [0, 0, 0]];
+        }
+
+        function draw() {
+            context.fillStyle = '#000';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            drawMatrix(arena, {x: 0, y: 0});
+            drawMatrix(player.matrix, player.pos);
+        }
+
+        function drawMatrix(matrix, offset) {
+            matrix.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value !== 0) {
+                        context.fillStyle = colors[value];
+                        context.fillRect(x + offset.x, y + offset.y, 1, 1);
+                    }
+                });
+            });
+        }
+
+        function merge(arena, player) {
+            player.matrix.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value !== 0) arena[y + player.pos.y][x + player.pos.x] = value;
+                });
+            });
+        }
+
+        function playerDrop() {
+            player.pos.y++;
+            if (collide(arena, player)) {
+                player.pos.y--;
+                merge(arena, player);
+                playerReset();
+                arenaSweep();
+                updateScore();
+            }
+            dropCounter = 0;
+            sendUpdate();
+        }
+
+        function playerMove(dir) {
+            player.pos.x += dir;
+            if (collide(arena, player)) player.pos.x -= dir;
+            sendUpdate();
+        }
+
+        function playerReset() {
+            const pieces = 'ILJOTSZ';
+            player.matrix = createPiece(pieces[pieces.length * Math.random() | 0]);
+            player.pos.y = 0;
+            player.pos.x = (arena[0].length / 2 | 0) - (player.matrix[0].length / 2 | 0);
+            if (collide(arena, player)) {
+                arena.forEach(row => row.fill(0));
+                player.score = 0;
+                updateScore();
+            }
+        }
+
+        function playerRotate(dir) {
+            const pos = player.pos.x;
+            let offset = 1;
+            rotate(player.matrix, dir);
+            while (collide(arena, player)) {
+                player.pos.x += offset;
+                offset = -(offset + (offset > 0 ? 1 : -1));
+                if (offset > player.matrix[0].length) {
+                    rotate(player.matrix, -dir);
+                    player.pos.x = pos;
+                    return;
                 }
-                if(cleared > 0) { linesCleared += cleared; score += [0, 100, 300, 500, 800][cleared] * level; if(linesCleared >= level * 10) level++; updateUI(); }
-                spawnPiece();
             }
-            if(!isSolo && socket?.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece, sender: myId }));
+            sendUpdate();
+        }
+
+        function rotate(matrix, dir) {
+            for (let y = 0; y < matrix.length; ++y) {
+                for (let x = 0; x < y; ++x) {
+                    [matrix[x][y], matrix[y][x]] = [matrix[y][x], matrix[x][y]];
+                }
+            }
+            if (dir > 0) matrix.forEach(row => row.reverse());
+            else matrix.reverse();
+        }
+
+        function sendUpdate() {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({
+                    type: 'update',
+                    score: player.score,
+                    matrix: player.matrix,
+                    pos: player.pos
+                }));
             }
         }
 
-        function updateUI() {
-            document.getElementById('score-disp').innerText = score;
-            document.getElementById('level-disp').innerText = level;
+        function updateScore() {
+            scoreElement.innerText = `Score: ${player.score}`;
         }
 
-        function handleInput(type, e) {
-            if(e) { e.preventDefault(); e.stopPropagation(); }
-            if (!isStarted || isFinished || !piece) return;
-            if (type === 'left') { piece.x--; if(collide(board, piece)) piece.x++; }
-            if (type === 'right') { piece.x++; if(collide(board, piece)) piece.x--; }
-            if (type === 'rotate') {
-                const pre = piece.matrix;
-                piece.matrix = piece.matrix[0].map((_, i) => piece.matrix.map(row => row[i]).reverse());
-                if(collide(board, piece)) piece.matrix = pre;
-            }
-            if (type === 'drop') { while(!collide(board, piece)) { piece.y++; } piece.y--; drop(); }
+        const colors = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF'];
+        const arena = createMatrix(12, 20);
+        const player = { pos: {x: 0, y: 0}, matrix: null, score: 0 };
+
+        let dropCounter = 0;
+        let dropInterval = 1000;
+        let lastTime = 0;
+
+        function update(time = 0) {
+            const deltaTime = time - lastTime;
+            lastTime = time;
+            dropCounter += deltaTime;
+            if (dropCounter > dropInterval) playerDrop();
+            draw();
+            requestAnimationFrame(update);
         }
 
-        function showResult(win) {
-            if(isFinished) return;
-            isFinished = true; isStarted = false; bgm.pause();
-            document.getElementById('final-score').innerText = score;
-            document.getElementById('result-text').innerText = win ? "勝ちました！" : "GAME OVER";
-            document.getElementById('result-overlay').style.display = "flex";
-            if(!isSolo && !win) socket.send(JSON.stringify({ type: 'lose', roomId }));
-        }
+        document.addEventListener('keydown', event => {
+            if (event.keyCode === 37) playerMove(-1);
+            else if (event.keyCode === 39) playerMove(1);
+            else if (event.keyCode === 40) playerDrop();
+            else if (event.keyCode === 81) playerRotate(-1);
+            else if (event.keyCode === 87) playerRotate(1);
+        });
 
-        document.getElementById('solo-btn').onclick = () => { isSolo = true; initGame(); };
-        document.getElementById('battle-btn').onclick = () => { 
-            roomId = document.getElementById('room-input').value.trim() || "FREE";
-            isSolo = false; connect(); 
-        };
-
-        function draw(ctx, b, p) {
-            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-            ctx.strokeStyle = '#222';
-            const bSize = ctx.canvas.width / COLS;
-            for(let i=0;i<=COLS;i++){ctx.beginPath();ctx.moveTo(i*bSize,0);ctx.lineTo(i*bSize,ctx.canvas.height);ctx.stroke();}
-            for(let i=0;i<=ROWS;i++){ctx.beginPath();ctx.moveTo(0,i*bSize);ctx.lineTo(ctx.canvas.width,i*bSize);ctx.stroke();}
-            b.forEach((row,y)=>{row.forEach((v,x)=>{if(v){ ctx.fillStyle=COLORS[v]; ctx.fillRect(x*bSize+1,y*bSize+1,bSize-2,bSize-2); }})});
-            if(p){ctx.fillStyle=COLORS[p.id];p.matrix.forEach((row,y)=>{row.forEach((v,x)=>{if(v)ctx.fillRect((p.x+x)*bSize+1,(p.y+y)*bSize+1,bSize-2,bSize-2);})});}
-        }
-
-        const bBtn=document.getElementById('boost-btn');
-        bBtn.addEventListener('touchstart', (e) => { e.preventDefault(); isBoosting = true; }, {passive: false});
-        bBtn.addEventListener('touchend', (e) => { e.preventDefault(); isBoosting = false; }, {passive: false});
-        bBtn.addEventListener('mousedown', () => { isBoosting = true; });
-        bBtn.addEventListener('mouseup', () => { isBoosting = false; });
-        
-        let lastTime=0, dropCounter=0;
-        function gameLoop(time=0){
-            const dt=time-lastTime; lastTime=time;
-            if(isStarted && !isFinished){
-                dropCounter += dt;
-                const interval = Math.max(50, 800 * Math.pow(0.85, level-1));
-                if(dropCounter > (isBoosting ? 25 : interval)){ drop(); dropCounter = 0; }
-            }
-            draw(localCtx, board, piece);
-            if(!isSolo) draw(remoteCtx, remoteBoard, remotePiece);
-            nextCtx.fillStyle = '#000'; nextCtx.fillRect(0,0,40,40);
-            if(nextQueue[0]){
-                const id=nextQueue[0]; nextCtx.fillStyle=COLORS[id];
-                SHAPES[id].forEach((row,y)=>{row.forEach((v,x)=>{if(v)nextCtx.fillRect(x*8+10,y*8+10,7,7);})});
-            }
-            requestAnimationFrame(gameLoop);
-        }
-        gameLoop();
+        playerReset();
+        updateScore();
+        update();
     </script>
 </body>
 </html>
-
-
-
-
-
-
