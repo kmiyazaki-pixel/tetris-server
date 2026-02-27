@@ -5,20 +5,19 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"     // ← 追加：Renderの環境設定を読むために必要
 	"sync"
 
 	"github.com/gorilla/websocket"
 )
 
-// クライアント管理
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-// 部屋ごとの状態管理（時差入室対策）
 type Room struct {
-	Clients map[*websocket.Conn]string // Conn -> UserID
-	History map[string]interface{}    // 最新の盤面データを保持
+	Clients map[*websocket.Conn]string
+	History map[string]interface{}
 	mu      sync.Mutex
 }
 
@@ -28,7 +27,8 @@ var roomsMu sync.Mutex
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
+		return
 	}
 	defer ws.Close()
 
@@ -58,10 +58,8 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		switch msgType {
 		case "join":
 			room.Clients[ws] = userID
-			// 1. 入室者にIDを通知
 			ws.WriteJSON(map[string]interface{}{"type": "start", "userId": userID})
-			
-			// 2. 時差入室対策：既にゲームが動いているなら、最新の盤面を送信
+			// 時差入室対策：現在の盤面を即座に共有
 			for id, data := range room.History {
 				if id != userID {
 					ws.WriteJSON(data)
@@ -69,9 +67,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			}
 
 		case "gameData":
-			// 最新状態を履歴に保存
 			room.History[userID] = msg
-			// 他の全員に転送
 			for client := range room.Clients {
 				if client != ws {
 					client.WriteJSON(msg)
@@ -88,26 +84,27 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		room.mu.Unlock()
 	}
 
-	// 切断処理
+	// 退出処理
+	roomsMu.Lock()
 	for rID, room := range rooms {
 		room.mu.Lock()
 		delete(room.Clients, ws)
 		if len(room.Clients) == 0 {
-			roomsMu.Lock()
 			delete(rooms, rID)
-			roomsMu.Unlock()
 		}
 		room.mu.Unlock()
 	}
+	roomsMu.Unlock()
 }
 
-// main.go の最後の方
 func main() {
-	port := os.Getenv("PORT") // Renderからポート番号をもらう
+	// RenderはPORT環境変数でポートを指定してくるので、それに対応
+	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080" // ローカルテスト用
+		port = "8080"
 	}
 	http.HandleFunc("/", handleConnections)
 	fmt.Println("Server started on :" + port)
+	// 0.0.0.0でバインドして外部からの接続を許可
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
