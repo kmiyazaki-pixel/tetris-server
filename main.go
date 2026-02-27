@@ -98,13 +98,13 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	// RenderはPORT環境変数でポートを指定してくるので、それに対応
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-	http.HandleFunc("/", handleConnections)
-	fmt.Println("Server started on :" + port)
-	// 0.0.0.0でバインドして外部からの接続を許可
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+    port := os.Getenv("PORT")
+    if port == "" {
+        port = "10000" // Renderのデフォルトは10000が多いです
+    }
+    http.HandleFunc("/", handleConnections)
+    fmt.Println("Server started on :" + port)
+    
+    // "0.0.0.0" を指定することで、外からの通信を逃さずキャッチします
+    log.Fatal(http.ListenAndServe("0.0.0.0:"+port, nil)) 
 }
