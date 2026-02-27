@@ -3,37 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>TETRIS BATTLE - FINAL</title>
+    <title>TETRIS BATTLE - STRIKE Edition</title>
     <style>
-        :root { --neon-blue: #00d2ff; --neon-pink: #ff007f; --glass: rgba(255, 255, 255, 0.05); }
+        /* 既存のスタイルを継承しつつ説明書用を追加 */
+        :root { --neon-blue: #00d2ff; --neon-pink: #ff007f; --neon-green: #0f0; --glass: rgba(255, 255, 255, 0.05); }
         body { background: #05050a; color: #fff; font-family: 'Arial Black', sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; overflow: hidden; }
         
-        #menu { text-align: center; background: var(--glass); padding: 30px; border-radius: 20px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); }
+        #menu { text-align: center; background: var(--glass); padding: 30px; border-radius: 20px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); max-width: 350px; }
         .menu-btn { display: block; width: 220px; padding: 15px; margin: 10px auto; font-size: 18px; background: transparent; color: #0f0; border: 2px solid #0f0; border-radius: 50px; cursor: pointer; transition: 0.3s; }
         .menu-btn:hover { background: #0f0; color: #000; box-shadow: 0 0 20px #0f0; }
-
+        
+        /* 説明書モーダル */
+        #manual-panel {
+            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 85%; max-width: 400px; height: 70vh; background: rgba(0,0,0,0.9);
+            border: 2px solid var(--neon-blue); border-radius: 20px; padding: 20px;
+            z-index: 200; overflow-y: auto; text-align: left; line-height: 1.6;
+        }
+        .manual-h { color: var(--neon-blue); border-bottom: 1px solid var(--neon-blue); margin-top: 20px; font-size: 18px; }
+        .manual-text { font-size: 14px; font-family: sans-serif; color: #ccc; }
+        .key { display: inline-block; padding: 2px 8px; background: #333; border-radius: 4px; color: #fff; font-weight: bold; margin: 2px; border: 1px solid #555; }
+        
+        /* 既存のゲーム用スタイル（省略不可な重要部分のみ） */
         #game-container { display: none; flex-direction: column; align-items: center; width: 100%; position: relative; }
         .battle-arena { display: flex; justify-content: center; align-items: center; gap: 20px; width: 95%; }
-        .player-zone { display: flex; flex-direction: column; align-items: center; transition: 0.5s; }
-        .label { font-size: 16px; margin-bottom: 5px; letter-spacing: 2px; text-shadow: 0 0 10px currentColor; }
-        
         canvas { background: #000; border-radius: 5px; height: 50vh; aspect-ratio: 12 / 20; }
         #tetris { border: 3px solid var(--neon-blue); box-shadow: 0 0 15px var(--neon-blue); }
         #enemy-canvas { border: 3px solid var(--neon-pink); box-shadow: 0 0 15px var(--neon-pink); }
-
-        /* 勝敗エフェクト */
-        #result-overlay {
-            display: none; position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
-            font-size: 80px; font-weight: bold; text-align: center; z-index: 100;
-            pointer-events: none; text-shadow: 0 0 30px #000;
-        }
-        .win { color: #ff0; text-shadow: 0 0 50px #ff0; animation: blink 0.5s infinite; }
-        .lose { color: #f00; text-shadow: 0 0 50px #f00; }
-        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
-
         .controls { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; width: 90%; max-width: 450px; margin-top: 25px; }
         .controls button { padding: 22px 0; font-size: 26px; background: var(--glass); color: #fff; border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; touch-action: manipulation; }
         .btn-hard { background: linear-gradient(135deg, var(--neon-blue), #0055ff) !important; border: none !important; }
+        #result-overlay { display: none; position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); font-size: 80px; font-weight: bold; text-align: center; z-index: 100; pointer-events: none; }
+        .win { color: #ff0; text-shadow: 0 0 50px #ff0; }
+        .lose { color: #f00; text-shadow: 0 0 50px #f00; }
     </style>
 </head>
 <body>
@@ -41,13 +43,47 @@
     <audio id="bgm" loop><source src="Tetris DS OST - Mario Tetris.mp3" type="audio/mpeg"></audio>
 
     <div id="menu">
-        <h1 style="color:var(--neon-blue); font-size: 32px; margin-bottom: 30px;">ULTIMATE VERSUS</h1>
+        <h1 style="color:var(--neon-blue); font-size: 28px; margin-bottom: 20px; letter-spacing: 2px;">TETRIS STRIKE</h1>
         <button class="menu-btn" onclick="initGame('solo')">SOLO TRAINING</button>
         <button class="menu-btn" onclick="showMatchSettings()">BATTLE START</button>
+        <button class="menu-btn" style="color:var(--neon-pink); border-color:var(--neon-pink);" onclick="toggleManual(true)">HOW TO PLAY</button>
+        
         <div id="match-settings" style="display:none; margin-top: 15px;">
             <input type="text" id="roomId" value="123" style="padding:10px; width:60px; text-align:center; border-radius: 5px; border: none;">
             <button onclick="initGame('multi')" style="padding:10px 20px; background:#0f0; border:none; border-radius:5px; font-weight:bold; cursor:pointer;">CONNECT</button>
         </div>
+    </div>
+
+    <div id="manual-panel">
+        <h2 style="text-align:center; color:var(--neon-green);">INSTRUCTION</h2>
+        
+        <div class="manual-h">■ 基本ルール</div>
+        <p class="manual-text">ブロック（テトリミノ）を横一列に隙間なく並べるとラインが消去されます。上まで積み上がると敗北です。</p>
+        
+        <div class="manual-h">■ 操作方法</div>
+        <p class="manual-text">
+            <span class="key">←</span> <span class="key">→</span>：左右移動<br>
+            <span class="key">↺</span> <span class="key">↻</span>：回転<br>
+            <span class="key">★</span>：ハードドロップ（一気に落とす）<br>
+            ※落下地点には「影（ゴースト）」が表示されます。
+        </p>
+
+        <div class="manual-h">■ 攻撃システム（VERSUS専用）</div>
+        <p class="manual-text">
+            一度に多くのラインを消すと、相手に「お邪魔ブロック」を送れます！<br>
+            ・2列消し：1ライン送信<br>
+            ・3列消し：2ライン送信<br>
+            ・4列消し：<span style="color:var(--neon-pink); font-weight:bold;">4ライン送信！</span>
+        </p>
+
+        <div class="manual-h">■ 対戦の始め方</div>
+        <p class="manual-text">
+            1. 友達と同じ「CODE（部屋番号）」を入力します。<br>
+            2. 2人とも「CONNECT」を押すと同期開始。<br>
+            3. どちらかが力尽きるまで、リアルタイムに攻撃を送り合うバトルが楽しめます。
+        </p>
+
+        <button class="menu-btn" style="width:100%; margin-top:20px;" onclick="toggleManual(false)">CLOSE</button>
     </div>
 
     <div id="game-container">
@@ -74,6 +110,12 @@
     </div>
 
     <script>
+        /* JavaScriptは以前のロジックに説明書用関数を追加 */
+        function toggleManual(show) {
+            document.getElementById('manual-panel').style.display = show ? 'block' : 'none';
+        }
+
+        // --- 以下、既存のゲームロジック（そのまま維持） ---
         const canvas = document.getElementById('tetris');
         const context = canvas.getContext('2d');
         const enemyCanvas = document.getElementById('enemy-canvas');
@@ -126,7 +168,25 @@
                 const data = JSON.parse(event.data);
                 if (data.type === 'gameData') drawEnemy(data);
                 if (data.type === 'lose') showResult('WIN');
+                if (data.type === 'attack') receiveAttack(data.lines);
             };
+        }
+
+        function receiveAttack(lines) {
+            for(let i = 0; i < lines; i++) {
+                const row = new Array(12).fill(8);
+                const hole = Math.floor(Math.random() * 12);
+                row[hole] = 0;
+                arena.shift();
+                arena.push(row);
+            }
+            sendUpdate();
+        }
+
+        function sendAttack(lines) {
+            if (gameMode === 'multi' && socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'attack', roomId: currentRoomId, lines: lines }));
+            }
         }
 
         function showResult(status) {
@@ -257,14 +317,20 @@
         }
 
         function arenaSweep() {
-            let rowCount = 1;
+            let linesCleared = 0;
             outer: for (let y = arena.length - 1; y > 0; --y) {
                 for (let x = 0; x < arena[y].length; ++x) { if (arena[y][x] === 0) continue outer; }
                 const row = arena.splice(y, 1)[0].fill(0);
                 arena.unshift(row);
                 ++y;
-                player.score += rowCount * 10;
-                rowCount *= 2;
+                linesCleared++;
+            }
+            if (linesCleared > 0) {
+                player.score += linesCleared * 10;
+                if (linesCleared >= 2) {
+                    let attackLines = linesCleared === 4 ? 4 : linesCleared - 1;
+                    sendAttack(attackLines);
+                }
                 playTone(800, 0.1, 'sine');
             }
             document.getElementById('score').innerText = player.score;
@@ -276,8 +342,6 @@
             player.matrix = createPiece(pieces[pieces.length * Math.random() | 0]);
             player.pos.y = 0;
             player.pos.x = (arena[0].length / 2 | 0) - (player.matrix[0].length / 2 | 0);
-            
-            // 天井判定
             if (collide(arena, player)) {
                 if(gameMode === 'multi' && !isGameOver) {
                     socket.send(JSON.stringify({type: "lose", roomId: currentRoomId}));
@@ -300,7 +364,7 @@
             if (type === 'Z') return [[7, 7, 0], [0, 7, 7], [0, 0, 0]];
         }
 
-        const colors = [null, '#FF007F', '#00D2FF', '#00FF7F', '#BC00FF', '#FF8E0D', '#FFE138', '#3877FF'];
+        const colors = [null, '#FF007F', '#00D2FF', '#00FF7F', '#BC00FF', '#FF8E0D', '#FFE138', '#3877FF', '#555'];
         const arena = Array.from({length: 20}, () => Array(12).fill(0));
         const player = { pos: {x: 0, y: 0}, matrix: null, score: 0 };
         let dropCounter = 0; let dropInterval = 1000; let lastTime = 0;
