@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>テトリス・インフェルノ - 社長公認マイルド版</title>
+    <title>テトリス・インフェルノ - 社長公認・安定版</title>
     <style>
-        /* 青い選択封印 */
+        /* 1. スマホの「青い選択」やメニューを徹底封じ */
         * {
             -webkit-user-select: none !important;
             user-select: none !important;
             -webkit-touch-callout: none !important;
             -webkit-tap-highlight-color: rgba(0,0,0,0) !important;
+            outline: none !important;
         }
         input { -webkit-user-select: auto !important; user-select: auto !important; }
 
@@ -45,12 +46,12 @@
 
     <div id="start-overlay" class="overlay">
         <div class="box">
-            <h1 style="color:#2196f3; margin:0; font-size:24px;">ひとり練習</h1>
+            <h1 style="color:#2196f3; margin:0; font-size:24px;">ひとりモード</h1>
             <button class="btn btn-blue" id="solo-btn">スタート</button>
             <hr style="border:0; border-top:1px solid #444; margin:15px 0;">
-            <h1 style="color:#f44336; margin:0; font-size:24px;">オンライン対戦</h1>
+            <h1 style="color:#f44336; margin:0; font-size:24px;">対戦モード</h1>
             <input type="text" id="room-input" placeholder="合言葉" style="width:100%; padding:10px; margin-bottom:10px; background:#000; color:#fff; border:1px solid #444; box-sizing:border-box; text-align:center;">
-            <button class="btn btn-red" id="battle-btn">参戦する</button>
+            <button class="btn btn-red" id="battle-btn">接続して参戦</button>
         </div>
     </div>
 
@@ -67,7 +68,6 @@
     <div class="info-panel">
         <div><span style="color:#aaa; font-size:10px;">スコア</span><span id="score-disp" class="stat-val">0</span></div>
         <div><span style="color:#aaa; font-size:10px;">レベル</span><span id="level-disp" class="stat-val">1</span></div>
-        <div id="timer-box" style="display:none;"></div>
     </div>
 
     <div class="main-layout" id="game-layout">
@@ -93,7 +93,9 @@
     </div>
 
     <script>
-        const SERVER_URL = 'wss://tetris-server-7w6p.onrender.com';
+        // 【重要】Renderで発行されたご自身のURL（wss://...）に書き換えてください
+        const SERVER_URL = 'wss://あなたのアプリ名.onrender.com';
+        
         const COLS = 10, ROWS = 20, BLOCK_SIZE = 20;
         const bgm = document.getElementById('bgm');
         
@@ -109,6 +111,7 @@
         localCanvas.height = remoteCanvas.height = ROWS * BLOCK_SIZE;
         const localCtx = localCanvas.getContext('2d'), remoteCtx = remoteCanvas.getContext('2d'), nextCtx = nextCanvas.getContext('2d');
 
+        // PC操作対応
         document.addEventListener('keydown', e => {
             if (!isStarted || isFinished) return;
             if (e.key === 'ArrowLeft') handleInput('left');
@@ -179,14 +182,14 @@
                 if(cleared > 0) {
                     linesCleared += cleared;
                     score += [0, 100, 300, 500, 800][cleared] * level;
-                    if(linesCleared >= level * 10) level++; // レベルアップ条件を少し緩和
+                    if(linesCleared >= level * 10) level++;
                     updateUI();
                 }
                 spawnPiece();
             }
-            // 通信頻度を最適化
+            // Goサーバーへ最新の盤面を送信
             if(!isSolo && socket?.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece }));
+                socket.send(JSON.stringify({ type: 'gameData', roomId, board, piece, sender: myId }));
             }
         }
 
@@ -212,7 +215,7 @@
             if(isFinished) return;
             isFinished = true; isStarted = false; bgm.pause();
             document.getElementById('final-score').innerText = score;
-            document.getElementById('result-text').innerText = win ? "勝ちました！" : "お疲れ様でした";
+            document.getElementById('result-text').innerText = win ? "勝ちました！" : "GAME OVER";
             document.getElementById('result-overlay').style.display = "flex";
             if(!isSolo && !win) socket.send(JSON.stringify({ type: 'lose', roomId }));
         }
@@ -229,11 +232,17 @@
             socket.onopen = () => { socket.send(JSON.stringify({ type: 'join', roomId })); };
             socket.onmessage = (e) => {
                 const data = JSON.parse(e.data);
-                if (data.type === 'start') { myId = data.userId; document.getElementById('remote-area').style.display = "block"; initGame(); }
-                if (data.type === 'gameData' && data.sender !== myId) { remoteBoard = data.board; remotePiece = data.piece; }
+                if (data.type === 'start') { 
+                    myId = data.userId; 
+                    document.getElementById('remote-area').style.display = "block"; 
+                    if(!isStarted) initGame(); 
+                }
+                if (data.type === 'gameData' && data.sender !== myId) { 
+                    remoteBoard = data.board; 
+                    remotePiece = data.piece; 
+                }
                 if (data.type === 'lose' && !isFinished) showResult(true);
             };
-            socket.onclose = () => { if(!isFinished && !isSolo) alert("通信が切れました。再接続してください。"); };
         }
 
         function draw(ctx, b, p) {
@@ -257,7 +266,6 @@
             const dt=time-lastTime; lastTime=time;
             if(isStarted && !isFinished){
                 dropCounter += dt;
-                // 落下速度を以前より少し緩やかに設定
                 const interval = Math.max(50, 800 * Math.pow(0.85, level-1));
                 if(dropCounter > (isBoosting ? 25 : interval)){ drop(); dropCounter = 0; }
             }
