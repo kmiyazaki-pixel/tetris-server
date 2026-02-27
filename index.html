@@ -67,12 +67,11 @@
         context.scale(20, 20);
         enemyCtx.scale(10, 10);
 
-        // サーバーURL
         const SERVER_URL = 'wss://tetris-server-new.onrender.com';
         let socket = null;
         let gameMode = 'solo';
+        let currentRoomId = "";
 
-        // --- 音声(SE) ---
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         function playTone(freq, duration) {
             if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -94,6 +93,7 @@
             document.getElementById('menu').style.display = 'none';
             document.getElementById('game-container').style.display = 'flex';
             if (mode === 'multi') {
+                currentRoomId = document.getElementById('roomId').value;
                 document.getElementById('multi-info').style.display = 'inline-block';
                 document.getElementById('enemy-area').style.display = 'block';
                 startOnline();
@@ -103,12 +103,12 @@
         }
 
         function startOnline() {
-            const roomId = document.getElementById('roomId').value;
-            socket = new WebSocket(`${SERVER_URL}?room=${roomId}`);
+            socket = new WebSocket(SERVER_URL);
             socket.onopen = () => {
                 document.getElementById('statusLamp').className = 'status-lamp on';
                 document.getElementById('statusText').innerText = 'ON';
-                sendUpdate();
+                // サーバーの "join" イベントに合わせる
+                socket.send(JSON.stringify({ type: "join", roomId: currentRoomId }));
             };
             socket.onclose = () => {
                 document.getElementById('statusLamp').className = 'status-lamp';
@@ -116,14 +116,18 @@
             };
             socket.onmessage = (event) => {
                 const data = JSON.parse(event.data);
-                if (data.type === 'update') drawEnemy(data);
+                // サーバーが送ってくる種類は "gameData"
+                if (data.type === 'gameData') drawEnemy(data);
+                if (data.type === 'lose') alert("相手が敗北しました！あなたの勝ちです。");
             };
         }
 
         function sendUpdate() {
             if (gameMode === 'multi' && socket && socket.readyState === WebSocket.OPEN) {
+                // サーバーの "gameData" 受信仕様に合わせる
                 socket.send(JSON.stringify({
-                    type: 'update',
+                    type: 'gameData',
+                    roomId: currentRoomId,
                     matrix: player.matrix,
                     pos: player.pos,
                     arena: arena
@@ -139,6 +143,7 @@
         }
 
         function drawMatrix(matrix, offset, ctx) {
+            if(!matrix) return;
             matrix.forEach((row, y) => {
                 row.forEach((value, x) => {
                     if (value !== 0) {
@@ -247,11 +252,6 @@
                 rowCount *= 2;
                 playTone(800, 0.1);
             }
-            if (gameMode === 'solo') {
-                player.level = Math.floor(player.score / 50) + 1;
-                dropInterval = Math.max(100, 1000 - (player.level - 1) * 150);
-                document.getElementById('level').innerText = player.level;
-            }
             document.getElementById('score').innerText = player.score;
             sendUpdate();
         }
@@ -262,8 +262,9 @@
             player.pos.y = 0;
             player.pos.x = (arena[0].length / 2 | 0) - (player.matrix[0].length / 2 | 0);
             if (collide(arena, player)) {
+                if(gameMode === 'multi') socket.send(JSON.stringify({type: "lose", roomId: currentRoomId}));
                 arena.forEach(row => row.fill(0));
-                player.score = 0; player.level = 1; dropInterval = 1000;
+                player.score = 0;
             }
             sendUpdate();
         }
@@ -280,7 +281,7 @@
 
         const colors = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF'];
         const arena = Array.from({length: 20}, () => Array(12).fill(0));
-        const player = { pos: {x: 0, y: 0}, matrix: null, score: 0, level: 1 };
+        const player = { pos: {x: 0, y: 0}, matrix: null, score: 0 };
         let dropCounter = 0; let dropInterval = 1000; let lastTime = 0;
 
         function update(time = 0) {
